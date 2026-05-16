@@ -15,11 +15,23 @@ description: OpenClaw CAE backend — CAD, Gmsh, OpenFOAM, CalculiX. YOU infer t
    - `mode`: `optimize` | `analyze` | `generate` | `collab`
    - Objectives, constraints, loads, fluid (speed, downforce, elevation)
    - Whether to run speed sweep (`run_speed_sweep`) and wing FEA (`run_wing_fea`)
-2. **Clarify** in Discord DM if critical numbers are missing (speed, load, downforce target, elevation).
-3. Build full **JobSpec JSON** yourself (see schema below). Do not rely on backend heuristics.
-4. Call `openclaw_engineering_submit_job(spec_json, user_request)`.
-5. Poll `openclaw_engineering_job_status` until `completed`.
-6. Deliver `REPORT.md`, `result.stl`, attachments via **OpenClaw Gmail** + confirm in **Discord DM**.
+2. **Clarify** in Discord DM if critical numbers are missing:
+   - **CFD:** speed mph, downforce/drag target, elevation
+   - **FEA:** force (N), direction, allowable stress (MPa) or material, how the part is fixed
+3. For **FEA**, infer loads from context when obvious (e.g. "bolted bracket" → tensile + fixed face) but **state assumptions** in `loads` or ask one question — never run with empty loads.
+4. Build full **JobSpec JSON** yourself (see schema below). Do not rely on backend heuristics.
+5. Call `openclaw_engineering_submit_job(spec_json, user_request)`.
+6. Poll `openclaw_engineering_job_status` until `completed`.
+7. Deliver `REPORT.md`, `result.stl`, attachments via **OpenClaw Gmail** + confirm in **Discord DM**.
+
+## Iteration loop (executor ↔ you)
+
+YAML flows in `flows/templates/` are **hardcoded**. Per job you only change:
+
+- Simulation: `fluid`, `loads`, `constraints`, `boundary_conditions`
+- CAD: `design_params`, `cad_params`, `input_stl` (accuracy to the real part)
+
+Each optimization pass the executor sends you **reduced metrics**. You return `param_adjustments` (via gateway review) to tune the 3D CAD generator on the next pass. Set `agent_review_each_pass: true`.
 
 ## Geometry rules (you must enforce — any demo)
 
@@ -81,7 +93,7 @@ Optional: include `grabcad_query` URL for user to download a reference STL; they
 ## Example demos (same skill, you infer details)
 
 - **914 rear wing:** CFD, rear_wing, speed sweep 10–130 mph, wing FEA, replace STL, email spec.
-- **Bracket FEA:** discipline fea, `optimize_fea.yaml`, max stress MPa, force N, no wing CAD.
+- **Bracket FEA:** discipline fea, `optimize_fea.yaml`, `loads.force_n`, `constraints` on `max_stress_mpa`, `design_params` e.g. `thickness_mm`; no wing CAD.
 - **Downforce kit:** geometry_kind downforce_kit, CFD, kit components only.
 
 ## Keys (OpenClaw terminal / ~/.openclaw/.env)

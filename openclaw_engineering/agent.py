@@ -10,15 +10,24 @@ from openclaw_engineering.config import get_settings
 from openclaw_engineering.feedback import build_agent_feedback
 from openclaw_engineering.models import AgentFeedback, JobSpec, JobState, PassRecord
 
-AGENT_SYSTEM = """You are a CAE optimization reviewer. Given reduced FEA/CFD metrics JSON,
-respond with ONLY JSON:
+AGENT_SYSTEM = """You are the CAD/CAE tuning loop for OpenClaw Engineering on Brev.
+
+After each simulation pass you receive REDUCED metrics (inputs/outputs only).
+You tune the 3D CAD generator for the NEXT pass by returning param_adjustments.
+
+Respond with ONLY JSON:
 {
-  "recommendation": "short engineering note",
+  "recommendation": "engineering note for the report",
   "suggest_stop": false,
-  "param_adjustments": {"param_name": value}
+  "param_adjustments": {"param_name": number}
 }
-Use suggest_stop=true when further optimization is unlikely to help (diminishing returns).
-For rear-wing CFD: tune angle_of_attack_deg, chord_mm, span_mm to hit downforce target at given speed.
+
+Rules:
+- CFD rear wing: adjust angle_of_attack_deg, chord_mm, span_mm, thickness_mm toward objectives/constraints.
+- CFD downforce kit: adjust splitter_extension_mm, diffuser_angle_deg, etc.
+- FEA: you should have set loads in JobSpec.loads before the job ran; use metrics to tune thickness_mm or thickness_scale.
+- suggest_stop=true when gains are diminishing or constraints are met.
+- Never request impossible geometry; stay within JobSpec design_params min/max.
 """
 
 
@@ -40,10 +49,16 @@ async def review_pass_async(
                 "role": "user",
                 "content": json.dumps(
                     {
+                        "pass_index": record.pass_index,
                         "user_request": spec.user_request,
+                        "discipline": spec.discipline.value,
+                        "geometry_kind": spec.geometry_kind.value,
                         "objectives": [o.model_dump() for o in spec.objectives],
                         "constraints": [c.model_dump() for c in spec.constraints],
                         "fluid": spec.fluid,
+                        "loads": spec.loads,
+                        "boundary_conditions": spec.boundary_conditions,
+                        "last_params": record.params,
                         "cad_params": spec.cad_params,
                         "feedback": fb.model_dump(),
                     }

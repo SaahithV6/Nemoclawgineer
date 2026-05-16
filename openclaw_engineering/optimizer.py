@@ -7,6 +7,7 @@ from typing import Callable
 
 from openclaw_engineering.config import load_defaults
 from openclaw_engineering.models import Constraint, Discipline, JobSpec, JobState, JobStatus, PassRecord
+from openclaw_engineering.agent import review_pass_sync
 from openclaw_engineering.runner import run_flow
 from openclaw_engineering.store import is_cancelled, save_state
 
@@ -130,6 +131,7 @@ def run_optimization(
             objective_value=obj,
             relative_gain=rel_gain,
         )
+
         state.passes.append(rec)
 
         improved = best_obj is None or obj < best_obj
@@ -143,6 +145,21 @@ def run_optimization(
             center = copy.deepcopy(params)
         else:
             plateau += 1
+
+        agent_center: dict[str, float] | None = None
+        if spec.agent_review_each_pass:
+            fb = review_pass_sync(spec, state, rec)
+            rec.agent_note = fb.recommendation
+            state.agent_log.append(fb)
+            seed = copy.deepcopy(best_params or params)
+            agent_center = _apply_agent_adjustments(seed, fb.param_adjustments, spec)
+            if fb.suggest_stop:
+                state.best_params = best_params or params
+                state.stop_reason = "agent_converged"
+                break
+
+        if agent_center is not None:
+            center = agent_center
 
         state.best_params = best_params
         save_state(state)
@@ -163,3 +180,26 @@ def run_optimization(
     state.stage = "done"
     save_state(state)
     return state
+
+
+def _apply_agent_adjustments(
+    seed: dict[str, float],
+    adjustments: dict[str, float],
+    spec: JobSpec,
+) -> dict[str, float]:
+    """Merge Nemotron param_adjustments into next-pass CAD seed (clamped to design_params)."""
+    if not adjustments:
+        return seed
+    merged = copy.deepcopy(seed)
+    bounds = {dp.name: dp for dp in spec.design_params}
+    for key, val in adjustments.items():
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            continue
+        if key in bounds:
+            dp = bounds[key]
+            merged[key] = max(dp.min, min(dp.max, v))
+        else:
+            merged[key] = v
+    return merged

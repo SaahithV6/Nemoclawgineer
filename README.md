@@ -28,7 +28,7 @@ openclaw config patch --file config/openclaw.discord.patch.json5
 openclaw config patch --file config/openclaw.hooks.patch.json5
 ```
 
-Docs: [docs/SETUP.md](docs/SETUP.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+Docs: **[docs/ORCHESTRATION_FLOW.md](docs/ORCHESTRATION_FLOW.md)** (full flow) · [docs/SETUP.md](docs/SETUP.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## CLI (testing only)
 

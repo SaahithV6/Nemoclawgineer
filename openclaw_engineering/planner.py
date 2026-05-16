@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from openclaw_engineering.constraints import enforce_agent_rules, infer_missing_from_request
-from openclaw_engineering.models import JobSpec
+from openclaw_engineering.models import Discipline, JobSpec
 
 
 def normalize_spec(spec: JobSpec, user_request: str = "", input_stl: str | None = None) -> JobSpec:
@@ -19,6 +19,11 @@ def normalize_spec(spec: JobSpec, user_request: str = "", input_stl: str | None 
     spec.input_stl = input_stl or spec.input_stl
     spec = infer_missing_from_request(spec)
     spec = enforce_agent_rules(spec)
+    if spec.discipline == Discipline.FEA and not spec.loads.get("yield_strength_mpa"):
+        for c in spec.constraints:
+            if c.metric == "max_stress_mpa":
+                spec.loads.setdefault("yield_strength_mpa", c.value * 1.1)
+                break
     return spec
 
 

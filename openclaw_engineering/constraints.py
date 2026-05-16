@@ -6,6 +6,7 @@ Documented in skills/openclaw-engineering/SKILL.md — not hardcoded to one vehi
 """
 
 from openclaw_engineering.models import (
+    ClarificationQuestion,
     DesignParam,
     Discipline,
     GeometryKind,
@@ -63,4 +64,50 @@ def enforce_agent_rules(spec: JobSpec) -> JobSpec:
 
     spec.use_optuna = False
     spec.agent_review_each_pass = True
+    spec = fea_load_clarification(spec)
+    return spec
+
+
+def fea_load_clarification(spec: JobSpec) -> JobSpec:
+    """Backstop when the agent submits FEA without loads — ask in Discord before running."""
+    if spec.discipline != Discipline.FEA:
+        return spec
+    if spec.needs_clarification:
+        return spec
+
+    loads = spec.loads or {}
+    has_force = any(k in loads for k in ("force_n", "magnitude", "force_vector"))
+    has_stress_limit = any(c.metric in ("max_stress_mpa", "stress_mpa") for c in spec.constraints)
+
+    questions: list[ClarificationQuestion] = []
+    if not has_force:
+        questions.append(
+            ClarificationQuestion(
+                field="loads.force_n",
+                question=(
+                    "What loads should this part see? (e.g. 500 N tensile, 2 kN shear, "
+                    "bolt preload, or describe the mounting / operating case.)"
+                ),
+            )
+        )
+    if not has_stress_limit:
+        questions.append(
+            ClarificationQuestion(
+                field="constraints.max_stress_mpa",
+                question=(
+                    "What is the allowable stress (MPa) or material? "
+                    "(e.g. aluminum 6061-T6 ~275 MPa yield, steel ~350 MPa.)"
+                ),
+            )
+        )
+    if not loads.get("fixed_faces") and not loads.get("constraint_hint"):
+        questions.append(
+            ClarificationQuestion(
+                field="loads.constraint_hint",
+                question="How is the part fixed? (e.g. one face bolted, two holes pinned, cantilever root.)",
+            )
+        )
+
+    if questions:
+        spec.needs_clarification = questions
     return spec
