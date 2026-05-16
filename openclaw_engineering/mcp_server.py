@@ -61,10 +61,19 @@ def openclaw_engineering_preview_sculpt(geometry_spec_json: str) -> str:
 
 
 @mcp.tool()
-def openclaw_engineering_submit_job(spec_json: str, user_request: str = "") -> str:
+def openclaw_engineering_submit_job(
+    spec_json: str,
+    user_request: str = "",
+    discord_user_id: str = "",
+) -> str:
     """Submit a CAE job. spec_json is a JobSpec JSON object with geometry_spec.sculpt_method."""
     spec = JobSpec.model_validate(json.loads(spec_json))
-    body = {"user_request": user_request or spec.user_request, "spec_json": spec.model_dump()}
+    body = {
+        "user_request": user_request or spec.user_request,
+        "spec_json": spec.model_dump(),
+    }
+    if discord_user_id:
+        body["discord_user_id"] = discord_user_id
     with httpx.Client(timeout=60.0) as client:
         resp = client.post(f"{_api()}/jobs/json", json=body)
         resp.raise_for_status()

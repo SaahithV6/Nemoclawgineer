@@ -32,26 +32,26 @@ sequenceDiagram
   participant Gmail as OpenClaw_Gmail
   participant OnShape as OnShape_API
 
-  User->>Discord: DM request + attach 914 STL
+  User->>Discord: DM request + provide body STL path/upload
   Discord->>Agent: Message wakes agent on Brev
   Agent->>User: Clarify speed / downforce / elevation if needed
   User->>Agent: Answers in DM
   Agent->>Agent: Infer JobSpec (wing vs kit, constraints, sweep)
-  Agent->>MCP: openclaw_engineering_submit_job(spec_json)
+  Agent->>MCP: openclaw_engineering_submit_job(spec_json, user_request, discord_user_id)
   MCP->>Exec: POST /jobs/json
   Exec->>OnShape: Optional export STL if configured
-  loop Optimization passes max 3
+  loop Optimization passes max 3 (defaults)
     Exec->>Exec: Constrained CAD from design_params
     Exec->>Exec: Gmsh mesh
     Exec->>OF: OpenFOAM or CalculiX
     OF-->>Exec: Reduced metrics JSON
-    Exec->>Agent: Per-pass review param_adjustments
+    Exec->>Agent: Optional per-pass review param_adjustments
     Agent-->>Exec: Tune CAD seed for next pass
   end
   Exec->>Exec: Speed sweep 10 to 130 mph
   Exec->>Exec: CalculiX wing stress + reinforcement note
   Exec->>Exec: Write REPORT.md result.stl DELIVERY.json
-  Exec->>OnShape: Upload result.stl replace part
+  Exec->>OnShape: Upload result.stl blob (when configured)
   Exec->>Hook: POST /hooks/agent job complete
   Hook->>Agent: Deliver artifacts instruction
   Agent->>Gmail: Email REPORT.md + STL
@@ -65,7 +65,7 @@ sequenceDiagram
 1. Deploy **OpenClaw on Brev** and complete `configure.sh` (NVIDIA Build API key → `~/.openclaw/.env`).
 2. Enable **OpenClaw Discord** (`config/openclaw.discord.patch.json5`, `DISCORD_BOT_TOKEN`, DM pairing).
 3. **DM the OpenClaw bot** (not a separate engineering bot).
-4. Describe what you want in natural language. Attach your **vehicle STL** when asked (e.g. Porsche 914 body).
+4. Describe what you want in natural language. Ensure a **vehicle STL path/upload** is available to the executor when mount-aware constraints are needed.
 5. The **agent infers** the demo type and may ask follow-ups before running anything.
 
 ### Example prompts
@@ -77,6 +77,7 @@ sequenceDiagram
 **Downforce kit:**
 
 > Full downforce kit: front splitter, air dam, louvres on the front arches, underbody diffuser, and a venturi duct from the front that routes air over the windshield. Optimize for downforce; email full report and replace my STL.
+> Full downforce kit: front splitter, air dam, louvres on the front arches, underbody diffuser, and a venturi duct from the front that routes air over the windshield. Optimize for downforce and deliver the report plus STL outputs.
 
 **Structural (no new wing CAD):**
 
@@ -121,7 +122,7 @@ The executor **validates** JobSpec ([`openclaw_engineering/constraints.py`](../o
 
 | Fixed (YAML in [`flows/templates/`](../flows/templates/)) | Variable (agent JobSpec) |
 |-----------------------------------------------------------|---------------------------|
-| Step order: CAD → attach → Gmsh → solve → metrics | OpenFOAM `fluid`, FEA `loads`, `constraints` |
+| Step order per template (CAD/deform → solver → metrics) | OpenFOAM `fluid`, FEA `loads`, `constraints` |
 | Tool bindings (Build123d, Gmsh, OpenFOAM, CalculiX) | `design_params` / `cad_params` for 3D accuracy to the real part |
 | Max passes, parallel candidates, convergence | User `input.stl`, optional OnShape pull |
 
@@ -140,6 +141,7 @@ Each optimization pass:
 5. **Next pass** seeds from those adjustments (clamped to `design_params` min/max) in [`openclaw_engineering/optimizer.py`](../openclaw_engineering/optimizer.py).
 
 The flow YAML does not change between iterations; only simulation inputs and CAD parameters move toward the user’s targets.
+Per-pass LLM review occurs when gateway/token settings allow agent review calls.
 
 ---
 
@@ -162,9 +164,9 @@ The agent collects **explicit** dimensions in Discord. Geometry is built from sc
 
 ### Uploaded STL
 
-- User file is `input.stl` on the job.
-- Final **`result.stl`** is the **full vehicle + aero** and **replaces** the original 914 model in deliverables (and OnShape when configured).
-- `original_914.stl` is kept in artifacts for traceability.
+- User file is `input.stl` on the job when provided.
+- Final **`result.stl`** follows `deliverable_scope` (`addon_only`, `full_assembly`, `body_only`).
+- For `full_assembly`, `original_body.stl` may be included in artifacts for traceability.
 
 ---
 
@@ -182,18 +184,17 @@ After MCP `openclaw_engineering_submit_job`, the executor runs **without** calli
 Default limits ([`config/openclaw-engineering.defaults.yaml`](../config/openclaw-engineering.defaults.yaml)):
 
 - **Max 3 passes**
-- Up to **4 parallel candidates** per pass (64 CPU)
+- Up to **8 parallel candidates** per pass (default)
 - Stop when improvement **&lt; 2%** for 2 consecutive passes, or constraints met, or user cancel
 
 Each pass runs flow template (e.g. [`flows/templates/cfd_wing_optimize.yaml`](../flows/templates/cfd_wing_optimize.yaml)):
 
 1. **CAD** — `generate_geometry` (wing or kit)  
 2. **Combine** — attach addon to body STL  
-3. **Mesh** — Gmsh  
-4. **Solve** — **OpenFOAM** (`simpleFoam`) for CFD  
-5. **Metrics** — Cd, Cl, downforce N, drag N  
+3. **Solve** — **OpenFOAM** (`simpleFoam`) for CFD  
+4. **Metrics** — Cd, Cl, downforce N, drag N  
 
-**OpenFOAM** is the physics solver. Optional Optuna is **off** by default (`use_optuna: false`).
+**OpenFOAM** is the physics solver; strict CFD runs fail if `simpleFoam` is not on PATH. Optional Optuna is **off** by default (`use_optuna: false`).
 
 Between passes, **reduced JSON feedback** goes to Nemotron; `param_adjustments` feed the next CAD pass (see §6).
 
@@ -208,7 +209,8 @@ Between passes, **reduced JSON feedback** goes to Nemotron; `param_adjustments` 
 | File | Purpose |
 |------|---------|
 | `REPORT.md` | Full specification sheet (see §7) |
-| `result.stl` | Replaces combined car + aero model |
+| `result.stl` | Final geometry per `deliverable_scope` |
+| `part.stl` | Generated addon-only part (when present) |
 | `metrics.json` | Last CFD point |
 | `speed_sweep.json` | Table 10–130 mph |
 | `wing_fea.json` | Stress / failure zones |
@@ -270,7 +272,7 @@ If `ONSHAPE_*` keys and document/workspace/element IDs are set:
 | NVIDIA / OpenClaw gateway | `~/.openclaw/.env` (via `configure.sh` or OpenClaw terminal) |
 | `DISCORD_BOT_TOKEN` | `~/.openclaw/.env` |
 | Gmail OAuth | OpenClaw `openclaw webhooks gmail setup` |
-| `OPENCLAW_HOOK_TOKEN` | `~/.openclaw/.env` |
+| `OPENCLAW_HOOK_TOKEN` | `~/.openclaw/.env` and `~/.openclaw-engineering/.env` (API process env) |
 | OnShape API keys + document IDs | `~/.openclaw-engineering/.env` |
 | OpenFOAM, Gmsh, CalculiX, FreeCAD AppImage | Installed by [`setup.sh`](../setup.sh) on Brev |
 
@@ -280,7 +282,7 @@ If `ONSHAPE_*` keys and document/workspace/element IDs are set:
 
 | Tool | Action |
 |------|--------|
-| `openclaw_engineering_submit_job(spec_json, user_request)` | Start job; may return `awaiting_user` if clarification needed |
+| `openclaw_engineering_submit_job(spec_json, user_request, discord_user_id)` | Start job; may return `awaiting_user` if clarification needed |
 | `openclaw_engineering_job_status(job_id)` | Poll status, passes, artifacts |
 | `openclaw_engineering_list_artifacts(job_id)` | List files |
 | `openclaw_engineering_fetch_artifact(job_id, name)` | Download URL for REPORT / STL |
@@ -309,8 +311,8 @@ Narrative you can use for judges or testing:
 
 1. DM OpenClaw with 914 STL attached.  
 2. Request: rear wing, 200 lbs @ 40 mph, sea level, low drag, full spec 10–130 mph, stress test.  
-3. Agent clarifies anything missing, submits JobSpec with `geometry_kind: rear_wing`.  
-4. Executor runs ≤3 OpenFOAM optimization passes on NACA wing + 914 body.  
+3. Agent clarifies anything missing, submits JobSpec with `discipline: cfd`, `part_category: wing`, and explicit `geometry_spec`.  
+4. Executor runs ≤3 OpenFOAM optimization passes on wing geometry + body constraints (when body STL is provided).  
 5. Speed sweep shows downforce/drag vs mph; report notes reduced top speed.  
 6. CalculiX flags wing stress hot spots; reinforcement pass documented.  
 7. Gmail: full `REPORT.md` + `result.stl`; OnShape updated; Discord confirmation.
@@ -336,5 +338,5 @@ Same skill and flow apply to **bracket FEA** or **downforce kit** — only the a
 - WhatsApp (Discord + OpenClaw only for hackathon)  
 - Raw LLM mesh vertex output (geometry is executor-built from clarified `geometry_spec`)  
 - SMTP credentials in the executor (Gmail via OpenClaw only)  
-- Topology optimization / LEAP71-style generative CAD  
+- Fully automatic topology optimization without clarified geometry constraints  
 - Unlimited LLM-in-the-loop solver passes (bounded passes for cloud credits)

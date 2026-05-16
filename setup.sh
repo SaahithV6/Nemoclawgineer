@@ -60,7 +60,7 @@ install_freecad_appimage() {
   cat > "$binlink" <<'WRAP'
 #!/usr/bin/env bash
 # Wrapper: run FreeCAD AppImage in console/batch mode
-APPIMAGE="${OPENCLAW_ENGINEERING_FREECAD_APPIMAGE:-HOME_PLACEHOLDER/.local/share/openclaw_engineering/apps/FreeCAD.AppImage}"
+APPIMAGE="${OPENCLAW_ENGINEERING_FREECAD_APPIMAGE:-HOME_PLACEHOLDER/.local/share/openclaw-engineering/apps/FreeCAD.AppImage}"
 APPIMAGE="${APPIMAGE/HOME_PLACEHOLDER/$HOME}"
 export APPIMAGE
 exec "$APPIMAGE" --console "$@"
@@ -80,7 +80,7 @@ install_openfoam_esi() {
   local script="$REPO_ROOT/scripts/install_openfoam_esi.sh"
   if [[ -x "$script" ]]; then
     log "Running OpenFOAM ESI installer (optional, may take several minutes)..."
-    bash "$script" || log "OpenFOAM ESI install skipped/failed — CFD may use reduced solver path"
+    bash "$script" || log "OpenFOAM ESI install skipped/failed — strict CFD runs will fail until simpleFoam is installed"
   else
     log "OpenFOAM not installed. Add ESI v2312 manually or run scripts/install_openfoam_esi.sh"
   fi
@@ -92,8 +92,8 @@ setup_venv() {
   fi
   # shellcheck disable=SC1091
   source "$VENV_DIR/bin/activate"
-  pip install -U pip wheel
-  pip install -e "$REPO_ROOT"
+  "$VENV_DIR/bin/python" -m pip install -U pip wheel
+  "$VENV_DIR/bin/python" -m pip install -e "$REPO_ROOT"
   log "Python stack: build123d, cadquery, optuna, pyvista, httpx, ..."
 }
 

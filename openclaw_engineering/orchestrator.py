@@ -3,9 +3,10 @@ from __future__ import annotations
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import shutil
 
 from openclaw_engineering.config import get_settings
-from openclaw_engineering.delivery.openclaw_notify import notify_openclaw_agent, write_delivery_manifest
+from openclaw_engineering.delivery.openclaw_notify import notify_openclaw_agent
 from openclaw_engineering.feasibility import apply_feasibility_to_spec
 from openclaw_engineering.integrations.onshape import pull_from_onshape, push_to_onshape
 from openclaw_engineering.models import Discipline, JobMode, JobSpec, JobState, JobStatus, PartCategory, SpeedSweepRow
@@ -30,9 +31,24 @@ from openclaw_engineering.tools.wing_fea import stress_test_wing
 _active: dict[str, threading.Thread] = {}
 
 
+def _record_integration_status(state: JobState, key: str, status: dict) -> None:
+    integ = dict(state.spec.cad_params.get("integration_status") or {})
+    integ[key] = status
+    state.spec.cad_params["integration_status"] = integ
+    save_state(state)
+
+
 def _body_stl_path(state: JobState) -> Path | None:
+    spec_stl = state.spec.input_stl
+    if spec_stl:
+        p = Path(spec_stl)
+        if p.exists():
+            return p
     p = job_dir(state.job_id) / "input.stl"
-    return p if p.exists() else None
+    if p.exists():
+        return p
+    alt = job_dir(state.job_id) / "input_onshape.stl"
+    return alt if alt.exists() else None
 
 
 def _apply_mount_feasibility(state: JobState) -> None:
@@ -56,21 +72,25 @@ def _deliver_results(state: JobState, stl_path: Path) -> None:
     report = artifact_path(state.job_id, "REPORT.md")
     result = artifact_path(state.job_id, "result.stl")
     metrics = artifact_path(state.job_id, "metrics.json")
-    atts = [p for p in (report, result, metrics) if p.exists()]
 
     if state.spec.onshape:
-        meta = push_to_onshape(result, state.spec.onshape, state.spec.onshape.part_name)
-        state.message = f"OnShape push: {meta.get('status', 'unknown')}"
+        try:
+            meta = push_to_onshape(result, state.spec.onshape, state.spec.onshape.part_name)
+        except Exception as exc:
+            meta = {"status": "failed", "error": str(exc)}
+        _record_integration_status(state, "onshape_push", meta)
+        state.message = ((state.message + " | ") if state.message else "") + f"OnShape push: {meta.get('status', 'unknown')}"
         save_state(state)
 
     email = state.spec.notify_email or get_settings().openclaw_engineering_notify_email
-    write_delivery_manifest(state.job_id, email, None)
     hook = notify_openclaw_agent(
         state.job_id,
         state.spec.user_request,
         notify_email=email,
+        discord_user_id=state.spec.discord_user_id,
     )
-    state.message = (state.message or "") + f" | Delivery: {hook.get('status')}"
+    _record_integration_status(state, "openclaw_delivery", hook)
+    state.message = ((state.message + " | ") if state.message else "") + f"Delivery: {hook.get('status')}"
     save_state(state)
 
 
@@ -166,7 +186,10 @@ def _execute_job(state: JobState) -> None:
         if state.spec.onshape:
             pulled = pull_from_onshape(jd, state.spec.onshape)
             if pulled:
-                state.spec.input_stl = str(pulled)
+                canonical = jd / "input.stl"
+                if pulled != canonical:
+                    shutil.copy2(pulled, canonical)
+                state.spec.input_stl = str(canonical)
                 save_state(state)
 
         _apply_mount_feasibility(state)
@@ -209,6 +232,7 @@ def submit_job(
     input_stl: Path | None = None,
     session_id: str | None = None,
     notify_email: str | None = None,
+    discord_user_id: str | None = None,
 ) -> JobState:
     stl_path = str(input_stl) if input_stl else None
     if spec is None:
@@ -218,6 +242,8 @@ def submit_job(
     spec.session_id = session_id or spec.session_id
     if notify_email:
         spec.notify_email = notify_email
+    if discord_user_id:
+        spec.discord_user_id = discord_user_id
 
     if spec.needs_clarification:
         state = create_job(spec)

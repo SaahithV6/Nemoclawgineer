@@ -125,7 +125,7 @@ class OnShapeClient:
                 url,
                 headers=headers,
                 content=stl_path.read_bytes(),
-                params={"fileName": fname} if False else None,
+                params={"fileName": fname},
             )
         if resp.status_code not in (200, 201):
             # Fallback: return metadata for manual upload in demo

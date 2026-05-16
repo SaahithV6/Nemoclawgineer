@@ -20,6 +20,30 @@ from openclaw_engineering.tools.geometry_catalog import (
     infer_part_category,
 )
 
+_CFD_FLOWS = {"analyze_cfd.yaml", "cfd_wing_optimize.yaml"}
+_FEA_FLOWS = {"optimize_fea.yaml"}
+
+
+def _normalize_template_name(name: str) -> str:
+    n = (name or "").strip()
+    if not n:
+        return ""
+    return n if n.endswith(".yaml") else f"{n}.yaml"
+
+
+def _recommended_flow(spec: JobSpec, text: str) -> str:
+    if spec.discipline == Discipline.CFD:
+        if spec.mode == JobMode.ANALYZE or ("analyze" in text and "optim" not in text):
+            return "analyze_cfd.yaml"
+        return "cfd_wing_optimize.yaml"
+    return "optimize_fea.yaml"
+
+
+def _is_flow_compatible(flow_name: str, discipline: Discipline) -> bool:
+    if discipline == Discipline.CFD:
+        return flow_name in _CFD_FLOWS
+    return flow_name in _FEA_FLOWS
+
 
 def infer_missing_from_request(spec: JobSpec) -> JobSpec:
     text = spec.user_request.lower()
@@ -46,13 +70,14 @@ def infer_missing_from_request(spec: JobSpec) -> JobSpec:
             k: v.get("default") for k, v in sm.param_schema.items() if isinstance(v, dict) and "default" in v
         }
 
-    if spec.discipline == Discipline.CFD and not spec.flow_template.endswith(".yaml"):
-        spec.flow_template = "cfd_wing_optimize.yaml"
-    if spec.discipline == Discipline.FEA and "optimize" in text:
-        spec.flow_template = "optimize_fea.yaml"
-
     if "analyze" in text and "optim" not in text:
         spec.mode = JobMode.ANALYZE
+
+    resolved_template = _normalize_template_name(spec.flow_template)
+    if not resolved_template or not _is_flow_compatible(resolved_template, spec.discipline):
+        spec.flow_template = _recommended_flow(spec, text)
+    else:
+        spec.flow_template = resolved_template
 
     mfg = dict(spec.manufacturing)
     gs = spec.geometry_spec
@@ -93,7 +118,6 @@ def enforce_agent_rules(spec: JobSpec) -> JobSpec:
     if spec.part_category == PartCategory.AERO_KIT:
         spec.run_wing_fea = False
 
-    spec.use_optuna = False
     spec.agent_review_each_pass = True
 
     pending = build_clarification(spec)

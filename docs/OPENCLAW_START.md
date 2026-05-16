@@ -14,7 +14,7 @@ You (Discord DM) ──► OpenClaw on Brev (Nemotron 120B, auto NVIDIA API key 
                          ├── MCP: openclaw_engineering_* (sculpt, jobs, artifacts)
                          │
                          └── Executor (this repo): sculpt engine, feasibility, Gmsh cache
-                                    ├── OpenFOAM (CFD)  ─┐ parallel on 64 CPU
+                                    ├── OpenFOAM (CFD)  ─┐ optimizer candidates + post-physics workers
                                     ├── CalculiX (FEA)  ─┘
                                     └── hook → Gmail + Discord reply
 ```
@@ -27,7 +27,7 @@ You (Discord DM) ──► OpenClaw on Brev (Nemotron 120B, auto NVIDIA API key 
 2. SSH in and clone this repo:
 
 ```bash
-git clone <your-repo-url> ~/openclaw-engineering
+git clone https://github.com/SaahithV6/Nemoclawgineer ~/openclaw-engineering
 cd ~/openclaw-engineering
 chmod +x setup.sh
 ./setup.sh
@@ -42,7 +42,7 @@ chmod +x setup.sh
 ~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-api
 
 # Optional: enable user systemd across logins on Brev
-sudo loginctl enable-linger ubuntu
+sudo loginctl enable-linger "$USER"
 # then after re-login:
 systemctl --user enable --now openclaw-engineering-api
 ```
@@ -52,15 +52,15 @@ FreeCAD AppImage is **optional**; if the download fails, setup continues (Build1
 4. Smoke test:
 
 ```bash
-openclaw-engineering-doctor
-OPENCLAW_ENGINEERING_DRY_RUN=1 openclaw-engineering-doctor --dry-test
+~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor
+OPENCLAW_ENGINEERING_DRY_RUN=1 ~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor --dry-test
 ```
 
 ---
 
 ## Part B — What you must do (one-time)
 
-### 1. Discord (required)
+### 1. Discord (required for DM-driven OpenClaw workflow)
 
 | Step | Action |
 |------|--------|
@@ -100,12 +100,15 @@ echo 'OPENCLAW_ENGINEERING_NOTIFY_EMAIL=you@gmail.com' >> ~/.openclaw-engineerin
 ### 3. Job-complete hook (autonomous delivery)
 
 ```bash
-echo "OPENCLAW_HOOK_TOKEN=$(openssl rand -hex 24)" >> ~/.openclaw/.env
+HOOK_TOKEN="$(openssl rand -hex 24)"
+echo "OPENCLAW_HOOK_TOKEN=$HOOK_TOKEN" >> ~/.openclaw/.env
+echo "OPENCLAW_HOOK_TOKEN=$HOOK_TOKEN" >> ~/.openclaw-engineering/.env
 openclaw config patch --file config/openclaw.hooks.patch.json5
 openclaw gateway restart
 ```
 
-When a job finishes, the executor POSTs to OpenClaw; the agent emails **REPORT.md** + STL and replies in Discord.
+When a job finishes, the executor POSTs `/hooks/agent` with `deliver: true` plus `DELIVERY.json`.
+OpenClaw then handles Gmail/Discord delivery policy. (`OPENCLAW_API_TOKEN` can be used as fallback auth if hook token is omitted.)
 
 ### 4. OnShape (optional — pull body / push result)
 
@@ -119,9 +122,10 @@ ONSHAPE_SECRET_KEY=...
 ONSHAPE_DOCUMENT_ID=...
 ONSHAPE_WORKSPACE_ID=...
 ONSHAPE_ELEMENT_ID=...
+# ONSHAPE_BASE_URL=https://cad.onshape.com  # optional override
 ```
 
-Executor exports body STL before solve and uploads `result.stl` after.
+Executor exports body STL before solve and uploads `result.stl` as OnShape document blob content after.
 
 ---
 
@@ -130,7 +134,8 @@ Executor exports body STL before solve and uploads `result.stl` after.
 ### Install skill + MCP (done by `setup.sh`)
 
 - Skill: `~/.openclaw/skills/openclaw-engineering/SKILL.md`
-- MCP: `openclaw-engineering-mcp` in `~/.openclaw/openclaw.json`
+- MCP server name: `openclaw-engineering` in `~/.openclaw/openclaw.json`
+- MCP command: `~/.local/share/openclaw-engineering/venv/bin/python -m openclaw_engineering.mcp_server`
 
 ### Agent system prompt snippet
 
@@ -138,14 +143,14 @@ Paste [`config/openclaw-engineering-agent.md`](../config/openclaw-engineering-ag
 
 ### Autonomous behavior (default)
 
-1. User DMs a request (attach **vehicle STL** for mount-fit wings).
+1. User DMs a request (attach **vehicle STL** for mount-fit wings; without body STL, mount envelope checks are skipped).
 2. Agent calls `openclaw_engineering_list_sculpt_methods` → asks **structured** questions (or executor returns `needs_clarification`).
-3. Agent submits `openclaw_engineering_submit_job` with full `geometry_spec` + `deliverable_scope`.
+3. Agent submits `openclaw_engineering_submit_job` with full `geometry_spec` + `deliverable_scope` + explicit `discipline` (`cfd` for aero/downforce, `fea` for stress/mass).
 4. Executor:
-   - **Feasibility** — clamp span/chord to body mount envelope; high downforce → tune camber/AoA, not absurd size.
+   - **Feasibility** — when body STL is available, computes mount envelope; `wing_loft`-style geometry gets span/chord clamps.
    - **Sculpt** — dynamic method (wing / hull / nozzle / SDF / bracket).
-   - **Optimize** — parallel candidate OpenFOAM runs (8-wide on 64 CPU).
-   - **Post** — speed sweep + **parallel CFD & FEA** + wing stress.
+   - **Optimize** — parallel candidates (`parallel_candidates`, default 8).
+   - **Post** — speed sweep + optional parallel physics workers (`parallel_physics_workers`, default 2) and wing stress.
    - **Deliver** — hook → Gmail + Discord.
 
 You do not run job commands manually unless debugging.
@@ -170,12 +175,12 @@ You do not run job commands manually unless debugging.
 
 ## Part E — Reality / feasibility (built in)
 
-The executor **always**:
+When body STL bounds are readable, the executor:
 
 1. Reads **body STL** bounds and computes a **mount envelope**.
-2. **Clamps** wing span/chord so the part fits the car.
+2. **Clamps** wing span/chord for wing-like geometry (`wing_loft` / wing features).
 3. For extreme downforce targets, prefers **aero parameter tuning** over scaling planform until it cannot mount.
-4. **Rejects** addon meshes that violate the envelope after sculpt.
+4. **Rejects** addon meshes that violate the envelope after sculpt (when envelope exists).
 
 Documented in `REPORT.md` under **Mount / feasibility**.
 
@@ -195,9 +200,10 @@ Use `sculpt_method: picogk_field` in JobSpec. Details: [PICOGK.md](PICOGK.md).
 | Feature | Config |
 |---------|--------|
 | Optimization candidates | `parallel_candidates: 8` in `config/openclaw-engineering.defaults.yaml` |
-| CFD + FEA together | `run_parallel_physics: true` on JobSpec (default) |
+| Post-process worker pool | `parallel_physics_workers: 2` in defaults |
+| CFD + wing/FEA post branches | `run_parallel_physics: true` on JobSpec (default) |
 | Mesh reuse | `~/.local/state/openclaw-engineering/mesh_cache/` |
-| OpenFOAM / CalculiX threads | `openfoam_procs`, `ccx_threads` in defaults |
+| CalculiX threads | `ccx_threads` in defaults (`openfoam_procs` is currently not wired in runner code) |
 
 ---
 
@@ -208,7 +214,9 @@ Use `sculpt_method: picogk_field` in JobSpec. Details: [PICOGK.md](PICOGK.md).
 | Nemotron 403 | Re-run Brev `configure.sh`; check `~/.openclaw/.env` |
 | Discord silent | Pairing, Message Content Intent, token in `~/.openclaw/.env` |
 | Geometry “does not fit vehicle” | Body STL missing or wrong units (mm); attach correct car model |
-| No email | `openclaw webhooks gmail run`; check hook token |
+| No email / no Discord delivery | `openclaw webhooks gmail run`; verify `OPENCLAW_HOOK_TOKEN` in `~/.openclaw-engineering/.env` and gateway hooks config |
+| `simpleFoam` missing | Install OpenFOAM; strict CFD jobs fail without it |
+| API not reachable from MCP | Ensure `openclaw-engineering-api` is running on `127.0.0.1:8765` |
 | MCP tools missing | `openclaw gateway restart`; verify `setup.sh` MCP block |
 
 ---

@@ -26,7 +26,7 @@ See `openclaw_engineering/models.py`. Key fields:
 |----------|----------|
 | `optimize_fea.yaml` | deform STL → Gmsh → CalculiX → metrics |
 | `analyze_cfd.yaml` | deform → OpenFOAM → CFD metrics |
-| `cfd_wing_optimize.yaml` | generative CAD → deliverable STL → mesh → OpenFOAM |
+| `cfd_wing_optimize.yaml` | generative CAD → deliverable STL → OpenFOAM |
 
 ## Reduced agent feedback (between passes)
 
@@ -80,7 +80,7 @@ OpenClaw Engineering writes `system/controlDict` and `constant/*` from `fluid` d
 
 - **Pull:** export Part Studio → `input_onshape.stl`
 - **Push:** upload `result.stl` (same filename when configured)
-- Requires `ONSHAPE_*` in `~/.openclaw_engineering/.env`
+- Requires `ONSHAPE_*` in `~/.openclaw-engineering/.env`
 
 ## Delivery (Discord + Gmail)
 

@@ -117,6 +117,7 @@ class JobSpec(BaseModel):
     session_id: str | None = None
     onshape: OnShapeRef | None = None
     notify_email: str | None = None
+    discord_user_id: str | None = None
     needs_clarification: list[ClarificationQuestion] = Field(default_factory=list)
     use_optuna: bool = False
     agent_review_each_pass: bool = True
@@ -207,6 +208,7 @@ class JobSubmitRequest(BaseModel):
     input_stl_path: str | None = None
     session_id: str | None = None
     notify_email: str | None = None
+    discord_user_id: str | None = None
 
 
 class JobSubmitResponse(BaseModel):

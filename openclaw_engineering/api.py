@@ -46,6 +46,7 @@ async def create_job_endpoint(
     spec_json: str | None = Form(None),
     session_id: str | None = Form(None),
     notify_email: str | None = Form(None),
+    discord_user_id: str | None = Form(None),
     file: UploadFile | None = File(None),
 ):
     spec = JobSpec.model_validate_json(spec_json) if spec_json else None
@@ -62,6 +63,7 @@ async def create_job_endpoint(
         input_stl=stl_path,
         session_id=session_id,
         notify_email=notify_email,
+        discord_user_id=discord_user_id,
     )
     if state.status == JobStatus.AWAITING_USER and session_id:
         get_conversation_store().set_pending(session_id, state.spec, state.pending_questions)
@@ -78,6 +80,7 @@ def create_job_json(body: JobSubmitRequest):
         input_stl=stl,
         session_id=body.session_id,
         notify_email=body.notify_email,
+        discord_user_id=body.discord_user_id,
     )
     return _job_response(state)
 

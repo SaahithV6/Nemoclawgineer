@@ -21,8 +21,7 @@ def mesh_stl(stl: Path, size: float, out_inp: Path) -> Path:
 
     gmsh_bin = which("gmsh")
     if not gmsh_bin:
-        out_inp.write_text(_minimal_inp_stub(stl, size))
-        return out_inp
+        raise RuntimeError("gmsh binary not found on PATH; cannot run strict solver pipeline")
 
     msh = out_inp.with_suffix(".msh")
     geo = out_inp.parent / "mesh.geo"
@@ -37,8 +36,9 @@ Save "{msh}";
     )
     proc = run_cmd([gmsh_bin, str(geo), "-3", "-format", "msh2"], timeout=900)
     if proc.returncode != 0 or not msh.exists():
-        out_inp.write_text(_minimal_inp_stub(stl, size))
-        return out_inp
+        raise RuntimeError(
+            f"gmsh meshing failed (code={proc.returncode}): {(proc.stderr or proc.stdout).strip()[:300]}"
+        )
 
     _msh_to_inp(msh, out_inp)
     if out_inp.exists():

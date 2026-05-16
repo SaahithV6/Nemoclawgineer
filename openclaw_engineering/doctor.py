@@ -25,10 +25,10 @@ def main():
     print(f"Dry run: {s.openclaw_engineering_dry_run}")
     print(f"Repo: {REPO_ROOT}")
     print("\nBinaries:")
-    check_bin("gmsh", optional=True)
-    check_bin("ccx", optional=True)
+    check_bin("gmsh", optional=False)
+    check_bin("ccx", optional=False)
     check_bin("freecadcmd", optional=True)
-    check_bin("simpleFoam", optional=True)
+    check_bin("simpleFoam", optional=False)
     check_bin("dotnet", optional=True)
     from openclaw_engineering.integrations.picogk_runner import picogk_status
 

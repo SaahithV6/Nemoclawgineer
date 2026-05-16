@@ -27,20 +27,17 @@ def run(inp: Path, loads: dict, out_dir: Path) -> Path:
 
     ccx = which("ccx") or which("ccx_2.21")
     if not ccx:
-        dat = out_dir / f"{job_name}.dat"
-        dat.write_text(
-            " total mass=0.015 kg\n"
-            " maximum stress=180.0 MPa\n"
-            " max displacement=0.42 mm\n"
-        )
-        write_json(out_dir / "metrics.json", _parse_dat(dat))
-        return out_dir
+        raise RuntimeError("CalculiX binary (ccx) not found on PATH; cannot run strict solver pipeline")
 
     env = {"OMP_NUM_THREADS": str(ccx_threads())}
     proc = run_cmd([ccx, job_name], cwd=out_dir, env=env, timeout=3600)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"CalculiX solve failed (code={proc.returncode}): {(proc.stderr or proc.stdout).strip()[:300]}"
+        )
     dat = out_dir / f"{job_name}.dat"
     if not dat.exists():
-        dat.write_text(proc.stdout + "\n" + proc.stderr)
+        raise RuntimeError("CalculiX did not produce a .dat result file")
     write_json(out_dir / "metrics.json", _parse_dat(dat))
     return out_dir
 

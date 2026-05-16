@@ -1,31 +1,40 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
-from openclaw_engineering.config import load_defaults
 from openclaw_engineering.tools.cfd_metrics import estimate_aero_metrics
 from openclaw_engineering.tools.util import dry_run, run_cmd, which, write_json
 
 
 def run_case(case_dir: Path, fluid: dict, stl: Path | None = None) -> Path:
     case_dir.mkdir(parents=True, exist_ok=True)
+    if stl is None or not stl.exists():
+        raise RuntimeError("CFD run requires a valid STL geometry input")
+    _stage_geometry(case_dir, stl)
     _write_minimal_case(case_dir, fluid)
 
     if dry_run():
         metrics = _synthetic_cfd_metrics(fluid)
+        metrics["proxy_metrics"] = 1.0
         write_json(case_dir / "metrics.json", metrics)
+        write_json(case_dir / "solver_status.json", {"source": "dry_run_proxy", "stl": str(stl)})
         return case_dir
 
     simple = which("simpleFoam")
     if not simple:
-        metrics = _synthetic_cfd_metrics(fluid)
-        write_json(case_dir / "metrics.json", metrics)
-        return case_dir
+        raise RuntimeError("OpenFOAM binary simpleFoam not found on PATH; cannot run strict solver pipeline")
 
-    run_cmd(["simpleFoam"], cwd=case_dir, timeout=7200)
+    proc = run_cmd([simple], cwd=case_dir, timeout=7200)
+    (case_dir / "simpleFoam.log").write_text((proc.stdout or "") + "\n" + (proc.stderr or ""))
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"OpenFOAM solve failed (code={proc.returncode}): {(proc.stderr or proc.stdout).strip()[:300]}"
+        )
     metrics = _parse_forces(case_dir, fluid)
     write_json(case_dir / "metrics.json", metrics)
+    write_json(case_dir / "solver_status.json", {"source": "simpleFoam_proxy_parse", "stl": str(stl)})
     return case_dir
 
 
@@ -61,6 +70,14 @@ writeInterval   100;
         f"nu              {u * 1e-5:.6e};\n"
     )
     (case_dir / "constant" / "rho").write_text(f"rho             {rho};\n")
+
+
+def _stage_geometry(case_dir: Path, stl: Path) -> Path:
+    tri = case_dir / "constant" / "triSurface"
+    tri.mkdir(parents=True, exist_ok=True)
+    staged = tri / stl.name
+    shutil.copy2(stl, staged)
+    return staged
 
 
 def _parse_forces(case_dir: Path, fluid: dict) -> dict[str, float]:

@@ -16,8 +16,8 @@ You ──DM──► OpenClaw (Discord + Nemotron on Brev)
 
 | Where | What |
 |-------|------|
-| OpenClaw (`~/.openclaw/.env`) | NVIDIA, `DISCORD_BOT_TOKEN`, Gmail, `OPENCLAW_HOOK_TOKEN` |
-| Executor (`~/.openclaw-engineering/.env`) | OnShape API keys only |
+| OpenClaw (`~/.openclaw/.env`) | NVIDIA, `DISCORD_BOT_TOKEN`, Gmail |
+| Executor (`~/.openclaw-engineering/.env`) | OnShape API keys, `OPENCLAW_HOOK_TOKEN`/`OPENCLAW_API_TOKEN` for hook auth |
 | OpenClaw skill | `skills/openclaw-engineering/SKILL.md` — **proactive Discord Q&A + geometry_spec** |
 
 ## Install on Brev
@@ -35,8 +35,8 @@ Docs: [ORCHESTRATION_FLOW.md](docs/ORCHESTRATION_FLOW.md) · [SCULPT_ENGINE.md](
 ## CLI (testing only)
 
 ```bash
-openclaw-engineering-doctor
-OPENCLAW_ENGINEERING_DRY_RUN=1
+~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor
+OPENCLAW_ENGINEERING_DRY_RUN=1 ~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor --dry-test
 ```
 
 OpenClaw demos should **not** use the CLI; the agent submits JobSpec JSON via MCP.

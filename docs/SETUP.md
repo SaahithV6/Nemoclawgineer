@@ -49,8 +49,8 @@ You ──DM──► OpenClaw Discord channel (one bot token)
 ## 2. Install openclaw_engineering
 
 ```bash
-git clone https://github.com/SaahithV6/OpenClaw Engineeringgineer.git
-cd OpenClaw Engineeringgineer
+git clone https://github.com/SaahithV6/Nemoclawgineer.git ~/openclaw-engineering
+cd ~/openclaw-engineering
 chmod +x setup.sh
 ./setup.sh
 ```
@@ -77,7 +77,7 @@ DISCORD_BOT_TOKEN=your_bot_token_here
 ```
 
 ```bash
-cd ~/OpenClaw Engineeringgineer
+cd ~/openclaw-engineering
 openclaw config patch --file config/openclaw.discord.patch.json5
 openclaw gateway restart   # or restart via Brev / launch script
 ```
@@ -105,7 +105,7 @@ Follow the OAuth / `gogcli` prompts. OpenClaw’s agent sends mail when a job fi
 
 Help: https://www.getopenclaw.ai/help/email-gmail-integration
 
-Set default recipient in `~/.openclaw_engineering/.env` (optional):
+Set default recipient in `~/.openclaw-engineering/.env` (optional):
 
 ```bash
 OPENCLAW_ENGINEERING_NOTIFY_EMAIL=you@gmail.com
@@ -119,7 +119,9 @@ So openclaw-engineering can tell Nemotron to deliver results:
 
 ```bash
 # ~/.openclaw/.env
-OPENCLAW_HOOK_TOKEN=$(openssl rand -hex 24)
+HOOK_TOKEN=$(openssl rand -hex 24)
+echo "OPENCLAW_HOOK_TOKEN=$HOOK_TOKEN" >> ~/.openclaw/.env
+echo "OPENCLAW_HOOK_TOKEN=$HOOK_TOKEN" >> ~/.openclaw-engineering/.env
 ```
 
 ```bash
@@ -127,7 +129,8 @@ openclaw config patch --file config/openclaw.hooks.patch.json5
 openclaw gateway restart
 ```
 
-When a job completes, openclaw-engineering writes `DELIVERY.json` and POSTs to `/hooks/agent`. The agent attaches `REPORT.md` + `result.stl` via Gmail and confirms in your Discord DM.
+When a job completes, openclaw-engineering writes `DELIVERY.json` and POSTs to `/hooks/agent`.
+OpenClaw then applies delivery policy (Gmail + Discord) from that hook.
 
 ---
 
@@ -138,7 +141,7 @@ Already done by `setup.sh`:
 - MCP server in `~/.openclaw/openclaw.json`
 - Skill `~/.openclaw/skills/openclaw-engineering/SKILL.md`
 
-Optional: add text from [`config/openclaw.openclaw_engineering-agent.md`](../config/openclaw.openclaw_engineering-agent.md) to your agent system prompt.
+Optional: add text from [`config/openclaw-engineering-agent.md`](../config/openclaw-engineering-agent.md) to your agent system prompt.
 
 ---
 
@@ -148,7 +151,7 @@ Optional: add text from [`config/openclaw.openclaw_engineering-agent.md`](../con
 2. **Create API key** → copy **Access key** and **Secret key**.
 3. Open your document in OnShape → URL contains:
    - `documents/<DOCUMENT_ID>/w/<WORKSPACE_ID>/e/<ELEMENT_ID>`
-4. Put in `~/.openclaw_engineering/.env`:
+4. Put in `~/.openclaw-engineering/.env`:
 
 ```bash
 ONSHAPE_ACCESS_KEY=...
@@ -170,26 +173,27 @@ Install OpenFOAM ESI v2312 on Brev per your license, then:
 
 ```bash
 which simpleFoam
-openclaw-engineering-doctor
+~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor
 ```
 
-**Optuna** (optional) only picks wing angles/chord between OpenFOAM runs; it does not replace OpenFOAM. Default is **off**; the pass-loop optimizer runs several OpenFOAM cases in parallel on 64 CPUs.
+Strict CFD runs require `simpleFoam` on PATH; without it, CFD jobs fail (except explicit dry-run mode).
+**Optuna** is optional and does not replace OpenFOAM.
 
 ---
 
 ## 9. Verify
 
 ```bash
-~/.local/share/openclaw_engineering/venv/bin/openclaw-engineering-doctor
-OPENCLAW_ENGINEERING_DRY_RUN=1 ~/.local/share/openclaw_engineering/venv/bin/openclaw-engineering-doctor --dry-test
+~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor
+OPENCLAW_ENGINEERING_DRY_RUN=1 ~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor --dry-test
 ```
 
 ---
 
 ## 10. Demo script (Porsche 914)
 
-1. **DM OpenClaw** (not a second bot): attach your **914 STL**, e.g.  
-   *"Rear wing, NACA style, 200 lbs downforce at 40 mph, sea level — replace my STL and email full spec."*
+1. **DM OpenClaw** (not a second bot): provide your **914 STL** (upload or resolver path), e.g.  
+   *"Rear wing, NACA style, 200 lbs downforce at 40 mph, sea level — deliver full spec and STL outputs."*
 2. Or **downforce kit**: *"Full kit: splitter, diffuser, louvres, air dam, venturi over windshield."*
 3. Answer speed / downforce / elevation if Nemotron asks.
 4. Backend: constrained wing/kit CAD → attach → Gmsh → **OpenFOAM** optimization → **10–130 mph sweep** → **CalculiX wing stress** → reinforcement notes.
@@ -207,4 +211,4 @@ OPENCLAW_ENGINEERING_DRY_RUN=1 ~/.local/share/openclaw_engineering/venv/bin/open
 | Discord no reply | Pairing, Message Content Intent, `DISCORD_BOT_TOKEN` in `~/.openclaw/.env` |
 | No email | `openclaw webhooks gmail run`; do not use SMTP password in openclaw-engineering |
 | OnShape export fails | Check document/workspace/element IDs and API keys |
-| CFD “fake” metrics | Install OpenFOAM or use `OPENCLAW_ENGINEERING_DRY_RUN=1` for pipeline test only |
+| CFD fails with missing solver | Install OpenFOAM so `simpleFoam` is on PATH (or use `OPENCLAW_ENGINEERING_DRY_RUN=1` only for pipeline testing) |
