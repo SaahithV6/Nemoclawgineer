@@ -11,12 +11,86 @@ APPS_DIR="${OPENCLAW_ENGINEERING_APPS:-$HOME/.local/share/openclaw-engineering/a
 USER_SYSTEMD="$HOME/.config/systemd/user"
 SKILL_DST="$HOME/.openclaw/skills/openclaw-engineering"
 OPENCLAW_JSON="$HOME/.openclaw/openclaw.json"
+RESET_ENV=0
+PYTHON_BIN="${OPENCLAW_ENGINEERING_PYTHON:-}"
 
 # FreeCAD AppImage (optional — Build123d is the primary CAD path)
 FREECAD_APPIMAGE_URL="${FREECAD_APPIMAGE_URL:-https://github.com/FreeCAD/FreeCAD/releases/download/1.0.0/FreeCAD_1.0.0-Linux-x86_64.AppImage}"
 FREECAD_APPIMAGE_URL_ALT="https://github.com/FreeCAD/FreeCAD/releases/download/1.1.1/FreeCAD_1.1.1-Linux-x86_64-py311.AppImage"
 
 log() { printf '[openclaw_engineering] %s\n' "$*"; }
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reset)
+        RESET_ENV=1
+        ;;
+      --help|-h)
+        cat <<'EOF'
+Usage: ./setup.sh [--reset]
+
+Options:
+  --reset   Remove executor venv + runtime state before reinstall.
+EOF
+        exit 0
+        ;;
+      *)
+        log "Unknown argument: $1"
+        exit 2
+        ;;
+    esac
+    shift
+  done
+}
+
+python_meets_requirement() {
+  local bin="$1"
+  "$bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'
+}
+
+ensure_python_runtime() {
+  local candidates=()
+  [[ -n "$PYTHON_BIN" ]] && candidates+=("$PYTHON_BIN")
+  candidates+=("python3.12" "python3.11" "python3")
+
+  for cand in "${candidates[@]}"; do
+    if command -v "$cand" >/dev/null 2>&1 && python_meets_requirement "$cand"; then
+      PYTHON_BIN="$(command -v "$cand")"
+      log "Using Python: $PYTHON_BIN ($("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")'))"
+      return 0
+    fi
+  done
+
+  if command -v apt-get >/dev/null 2>&1; then
+    log "Python >=3.11 not found. Installing python3.11 (sudo)..."
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3.11 python3.11-venv; then
+      log "Direct install failed; trying deadsnakes PPA for Ubuntu 22.04..."
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq software-properties-common
+      sudo add-apt-repository -y ppa:deadsnakes/ppa
+      sudo apt-get update -qq
+      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3.11 python3.11-venv
+    fi
+    if command -v python3.11 >/dev/null 2>&1 && python_meets_requirement python3.11; then
+      PYTHON_BIN="$(command -v python3.11)"
+      log "Using Python: $PYTHON_BIN ($("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")'))"
+      return 0
+    fi
+  fi
+
+  log "ERROR: Could not provision Python >=3.11. Set OPENCLAW_ENGINEERING_PYTHON to a valid interpreter."
+  exit 1
+}
+
+reset_environment() {
+  if [[ "$RESET_ENV" -ne 1 ]]; then
+    return 0
+  fi
+  log "Reset requested: stopping API + clearing venv/runtime state"
+  pkill -f "openclaw-engineering-api" >/dev/null 2>&1 || true
+  rm -rf "$VENV_DIR" "$STATE_DIR"
+  mkdir -p "$STATE_DIR"
+}
 
 install_apt_packages() {
   if ! command -v apt-get >/dev/null 2>&1; then
@@ -87,8 +161,18 @@ install_openfoam_esi() {
 }
 
 setup_venv() {
+  local recreate=0
+  if [[ -x "$VENV_DIR/bin/python" ]]; then
+    if ! "$VENV_DIR/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+      log "Existing venv uses Python <3.11; recreating venv."
+      recreate=1
+    fi
+  fi
+  if [[ "$recreate" -eq 1 ]]; then
+    rm -rf "$VENV_DIR"
+  fi
   if [[ ! -d "$VENV_DIR" ]]; then
-    python3 -m venv "$VENV_DIR"
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
   fi
   # shellcheck disable=SC1091
   source "$VENV_DIR/bin/activate"
@@ -123,7 +207,7 @@ merge_openclaw_mcp() {
   mkdir -p "$(dirname "$OPENCLAW_JSON")"
   [[ -f "$OPENCLAW_JSON" ]] || echo '{}' > "$OPENCLAW_JSON"
   export OPENCLAW_ENGINEERING_VENV_PYTHON="$VENV_DIR/bin/python" OPENCLAW_JSON
-  python3 <<'PY'
+  "$PYTHON_BIN" <<'PY'
 import json, os
 from pathlib import Path
 p = Path(os.environ["OPENCLAW_JSON"])
@@ -198,9 +282,12 @@ EOF
 }
 
 main() {
+  parse_args "$@"
   log "=== OpenClaw Engineering setup (Brev) ==="
   log "Repo: $REPO_ROOT"
   install_apt_packages
+  ensure_python_runtime
+  reset_environment
   setup_env_file
   install_freecad_appimage
   setup_venv
