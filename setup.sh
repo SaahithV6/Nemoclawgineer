@@ -100,7 +100,7 @@ install_apt_packages() {
   log "Installing system packages (sudo)..."
   sudo apt-get update -qq
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    python3 python3-venv python3-pip git jq curl parallel wget \
+    python3 python3-venv python3-pip git jq curl parallel wget software-properties-common \
     gmsh calculix-ccx xvfb libgl1 libxrender1 libsm6 \
     libocct-foundation-dev libocct-modeling-algorithms-dev \
     || log "Some apt packages failed; continuing"
@@ -151,12 +151,23 @@ install_openfoam_esi() {
     log "OpenFOAM already on PATH"
     return
   fi
-  local script="$REPO_ROOT/scripts/install_openfoam_esi.sh"
-  if [[ -x "$script" ]]; then
-    log "Running OpenFOAM ESI installer (optional, may take several minutes)..."
-    bash "$script" || log "OpenFOAM ESI install skipped/failed — strict CFD runs will fail until simpleFoam is installed"
+  log "Installing OpenFOAM Foundation (openfoam13) from dl.openfoam.org..."
+  sudo sh -c "wget -O - https://dl.openfoam.org/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc"
+  if ! grep -qs "dl\\.openfoam\\.org/ubuntu" "/etc/apt/sources.list" 2>/dev/null \
+    && ! grep -Rqs "dl\\.openfoam\\.org/ubuntu" "/etc/apt/sources.list.d" 2>/dev/null; then
+    sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
   else
-    log "OpenFOAM not installed. Add ESI v2312 manually or run scripts/install_openfoam_esi.sh"
+    log "OpenFOAM apt repository already configured"
+  fi
+  sudo apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openfoam13 || {
+    log "OpenFOAM install failed — strict CFD runs will fail until simpleFoam is installed"
+    return
+  }
+  if command -v simpleFoam >/dev/null 2>&1; then
+    log "OpenFOAM installed: $(command -v simpleFoam)"
+  else
+    log "OpenFOAM package installed but simpleFoam not on current PATH; source OpenFOAM bashrc in your shell profile."
   fi
 }
 
