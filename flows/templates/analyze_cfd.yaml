@@ -1,0 +1,21 @@
+name: analyze_cfd
+vars:
+  stl_in: ${job.input_stl}
+steps:
+  - id: cad_deform
+    run: nemoclaw.tools.freecad.deform_stl
+    with:
+      stl: ${job.input_stl}
+      params: ${job.params}
+    out: deformed.stl
+  - id: cfd
+    run: nemoclaw.tools.openfoam.run_case
+    with:
+      stl: ${deformed.stl}
+      fluid: ${job.fluid}
+    out: openfoam/
+  - id: metrics
+    run: nemoclaw.tools.cfd.extract_cfd_metrics
+    with:
+      case_dir: ${openfoam/}
+    out: metrics.json

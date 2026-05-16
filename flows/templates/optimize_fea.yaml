@@ -1,0 +1,28 @@
+name: optimize_fea
+vars:
+  stl_in: ${job.input_stl}
+  params: ${job.params}
+steps:
+  - id: cad_deform
+    run: nemoclaw.tools.freecad.deform_stl
+    with:
+      stl: ${job.input_stl}
+      params: ${job.params}
+    out: deformed.stl
+  - id: mesh
+    run: nemoclaw.tools.gmsh.mesh_stl
+    with:
+      stl: ${deformed.stl}
+      size: ${job.mesh_size}
+    out: model.inp
+  - id: fea
+    run: nemoclaw.tools.calculix.run
+    with:
+      inp: ${model.inp}
+      loads: ${job.loads}
+    out: results/
+  - id: metrics
+    run: nemoclaw.tools.fea.extract_metrics
+    with:
+      results_dir: ${results/}
+    out: metrics.json
