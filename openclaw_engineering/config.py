@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     openclaw_engineering_freecad_appimage: str = os.path.expanduser(
         "~/.local/share/openclaw-engineering/apps/FreeCAD.AppImage"
     )
+    openclaw_engineering_picogk_enabled: bool = False
+    openclaw_engineering_picogk_runtime_path: str = ""
 
     @property
     def data_dir(self) -> Path:
@@ -65,7 +67,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    dry = os.environ.get("OPENCLAW_ENGINEERING_DRY_RUN", os.environ.get("NEMCLAW_DRY_RUN", "0"))
+    dry = os.environ.get("OPENCLAW_ENGINEERING_DRY_RUN", "0")
     s = Settings()
     if dry in ("1", "true", "yes"):
         s.openclaw_engineering_dry_run = True

@@ -99,6 +99,17 @@ def run_optimization(
         candidates = _candidate_params(spec, center, spread)
 
         def eval_one(params: dict[str, float]) -> tuple[dict[str, float], dict[str, float], float, bool]:
+            from openclaw_engineering.feasibility import apply_feasibility_to_spec
+            from openclaw_engineering.store import job_dir
+
+            body = job_dir(state.job_id) / "input.stl"
+            if body.exists():
+                spec.geometry_spec, _ = apply_feasibility_to_spec(
+                    {**spec.geometry_spec, "params": {**spec.geometry_spec.get("params", {}), **params}},
+                    body_stl=body,
+                    fluid=spec.fluid,
+                )
+                spec.geometry_spec["_fluid"] = spec.fluid
             result = run_flow(state.job_id, spec, params)
             metrics = result["metrics"]
             obj = _objective_value(spec, metrics)

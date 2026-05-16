@@ -5,8 +5,10 @@ Pipeline **topology is fixed** in this directory. Per job, only these change:
 | Variable | Set by | Examples |
 |----------|--------|----------|
 | Simulation constraints | OpenClaw agent in JobSpec | OpenFOAM `fluid`, FEA `loads`, `constraints` |
-| CAD parameters | Agent + feedback loop | AoA, chord, span, thickness |
-| Input geometry | User STL / OnShape | `input.stl` — anchors model to real part |
+| **`geometry_spec`** | Agent after Discord Q&A | bracket legs, join_pattern, wing span, holes |
+| **`deliverable_scope`** | User + agent | `addon_only` = part file only; `full_assembly` = merge body |
+| Optimizer tweaks | Nemotron per pass | `param_adjustments` on feature dimensions |
+| Input geometry | User STL / OnShape | optional body for assembly CFD |
 
 ## Templates
 

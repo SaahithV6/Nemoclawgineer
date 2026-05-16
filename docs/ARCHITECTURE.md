@@ -7,7 +7,7 @@
 | **OpenClaw** | Discord DM, Gmail, Nemotron, skills, MCP, hooks |
 | **openclaw-engineering** (this repo) | Silent executor on Brev: mesh, OpenFOAM, CalculiX, reports |
 
-There is no separate user-facing "nemoclaw" platform.
+Users interact only with OpenClaw (Discord, Gmail); this repo is the headless executor.
 
 ## Who plans the demo?
 

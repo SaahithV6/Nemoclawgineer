@@ -7,6 +7,13 @@ from openclaw_engineering.tools.util import dry_run, run_cmd, which, write_json
 
 def mesh_stl(stl: Path, size: float, out_inp: Path) -> Path:
     out_inp.parent.mkdir(parents=True, exist_ok=True)
+    from openclaw_engineering.mesh_cache import get_cached_inp, store_cached_inp
+
+    cached = get_cached_inp(stl, size)
+    if cached and cached.exists():
+        out_inp.write_bytes(cached.read_bytes())
+        return out_inp
+
     if dry_run():
         out_inp.write_text(_minimal_inp_stub(stl, size))
         write_json(out_inp.with_suffix(".mesh.json"), {"size": size, "dry_run": True})
@@ -34,6 +41,8 @@ Save "{msh}";
         return out_inp
 
     _msh_to_inp(msh, out_inp)
+    if out_inp.exists():
+        store_cached_inp(stl, size, out_inp)
     return out_inp
 
 

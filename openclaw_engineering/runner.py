@@ -16,6 +16,7 @@ STEP_REGISTRY: dict[str, str] = {
     "openclaw_engineering.tools.build123d_cad.generate_rear_wing": "openclaw_engineering.tools.build123d_cad",
     "openclaw_engineering.tools.build123d_cad.generate_geometry": "openclaw_engineering.tools.build123d_cad",
     "openclaw_engineering.tools.build123d_cad.attach_wing_to_body": "openclaw_engineering.tools.build123d_cad",
+    "openclaw_engineering.tools.build123d_cad.resolve_deliverable_stl": "openclaw_engineering.tools.build123d_cad",
     "openclaw_engineering.tools.gmsh.mesh_stl": "openclaw_engineering.tools.gmsh",
     "openclaw_engineering.tools.calculix.run": "openclaw_engineering.tools.calculix",
     "openclaw_engineering.tools.fea.extract_metrics": "openclaw_engineering.tools.fea",
@@ -112,8 +113,15 @@ def run_flow(
             "mesh_size": mesh_size,
             "loads": spec.loads,
             "fluid": spec.fluid,
-            "params": {**params, "kind": spec.geometry_kind.value, **spec.cad_params},
+            "params": {
+                **params,
+                "part_category": spec.part_category.value,
+                **spec.cad_params,
+            },
+            "geometry_spec": spec.geometry_spec,
+            "deliverable_scope": spec.deliverable_scope.value,
             "user_request": spec.user_request,
+            "fluid": spec.fluid,
         },
         "params": params,
     }
@@ -187,24 +195,39 @@ def run_flow(
             "openclaw_engineering.tools.build123d_cad.generate_geometry",
         ):
             out_path = work / "addon.stl"
-            merged = {**spec.cad_params, **params, "kind": spec.geometry_kind.value}
+            gs = {
+                **spec.geometry_spec,
+                "_fluid": spec.fluid,
+                "input_stl": stl_in if Path(stl_in).exists() else spec.input_stl,
+            }
+            merged = {**spec.cad_params, **params, "part_category": spec.part_category.value}
             _call_step(
-                run_path if run_path.endswith("generate_geometry") else "openclaw_engineering.tools.build123d_cad.generate_geometry",
+                "openclaw_engineering.tools.build123d_cad.generate_geometry",
                 {
                     "params": merged,
                     "out_stl": out_path,
                     "user_request": spec.user_request,
+                    "geometry_spec": gs,
                 },
             )
             artifacts["addon.stl"] = out_path
-            artifacts["wing.stl"] = out_path
-        elif run_path == "openclaw_engineering.tools.build123d_cad.attach_wing_to_body":
+            artifacts["part.stl"] = out_path
+        elif run_path in (
+            "openclaw_engineering.tools.build123d_cad.attach_wing_to_body",
+            "openclaw_engineering.tools.build123d_cad.resolve_deliverable_stl",
+        ):
             out_path = work / "combined.stl"
+            body = Path(resolved_with.get("body_stl", stl_in))
+            if not body.exists():
+                body = Path(stl_in)
             _call_step(
-                run_path,
+                "openclaw_engineering.tools.build123d_cad.resolve_deliverable_stl",
                 {
-                    "body_stl": Path(resolved_with["body_stl"]),
-                    "wing_stl": Path(resolved_with["wing_stl"]),
+                    "deliverable_scope": resolved_with.get(
+                        "deliverable_scope", spec.deliverable_scope.value
+                    ),
+                    "addon_stl": Path(resolved_with.get("addon_stl", artifacts.get("addon.stl", out_path))),
+                    "body_stl": body,
                     "out_stl": out_path,
                 },
             )

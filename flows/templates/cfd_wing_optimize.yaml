@@ -9,11 +9,12 @@ steps:
       params: ${job.params}
       user_request: ${job.user_request}
     out: addon.stl
-  - id: combine
-    run: openclaw_engineering.tools.build123d_cad.attach_wing_to_body
+  - id: deliverable
+    run: openclaw_engineering.tools.build123d_cad.resolve_deliverable_stl
     with:
+      deliverable_scope: ${job.deliverable_scope}
+      addon_stl: ${addon.stl}
       body_stl: ${job.input_stl}
-      wing_stl: ${addon.stl}
     out: combined.stl
   - id: mesh
     run: openclaw_engineering.tools.gmsh.mesh_stl

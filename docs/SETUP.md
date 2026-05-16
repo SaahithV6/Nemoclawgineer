@@ -1,5 +1,7 @@
 # OpenClaw Engineering + OpenClaw setup (Brev)
 
+> **Quick start:** [OPENCLAW_START.md](OPENCLAW_START.md) — autonomous agent, Discord, Gmail, OnShape checklist.
+
 ## Architecture (what connects to what)
 
 ```text

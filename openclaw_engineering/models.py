@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class JobMode(str, Enum):
@@ -26,9 +26,25 @@ class CadBackend(str, Enum):
     STL_DEFORM = "stl_deform"
 
 
+class PartCategory(str, Enum):
+    """Soft label for clarification templates — not a hard CAD router."""
+    WING = "wing"
+    BRACKET = "bracket"
+    AERO_KIT = "aero_kit"
+    STRUCTURAL = "structural"
+    CUSTOM = "custom"
+
+
+# Backward compatibility for older JobSpec JSON
 class GeometryKind(str, Enum):
     REAR_WING = "rear_wing"
     DOWNFORCE_KIT = "downforce_kit"
+
+
+class DeliverableScope(str, Enum):
+    ADDON_ONLY = "addon_only"
+    FULL_ASSEMBLY = "full_assembly"
+    BODY_ONLY = "body_only"
 
 
 class JobStatus(str, Enum):
@@ -85,7 +101,11 @@ class JobSpec(BaseModel):
     fluid: dict[str, Any] = Field(default_factory=dict)
     design_params: list[DesignParam] = Field(default_factory=list)
     cad_params: dict[str, Any] = Field(default_factory=dict)
-    geometry_kind: GeometryKind = GeometryKind.REAR_WING
+    part_category: PartCategory = PartCategory.CUSTOM
+    geometry_kind: GeometryKind | None = None  # legacy alias
+    geometry_spec: dict[str, Any] = Field(default_factory=dict)
+    deliverable_scope: DeliverableScope = DeliverableScope.ADDON_ONLY
+    manufacturing: dict[str, Any] = Field(default_factory=dict)
     grabcad_query: str | None = None
     reference_stl: str | None = None
     run_speed_sweep: bool = True
@@ -100,6 +120,25 @@ class JobSpec(BaseModel):
     needs_clarification: list[ClarificationQuestion] = Field(default_factory=list)
     use_optuna: bool = False
     agent_review_each_pass: bool = True
+    run_parallel_physics: bool = True
+    feasibility: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _compat_legacy_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        gk = data.get("geometry_kind")
+        if gk and not data.get("part_category"):
+            gks = str(gk).lower().replace("-", "_")
+            if gks in ("rear_wing", "rearwing"):
+                data["part_category"] = PartCategory.WING
+            elif gks == "downforce_kit":
+                data["part_category"] = PartCategory.AERO_KIT
+        t = (data.get("user_request") or "").lower()
+        if any(p in t for p in ("only the wing", "wing only", "part file only", "addon only", "bracket only")):
+            data["deliverable_scope"] = DeliverableScope.ADDON_ONLY
+        return data
 
     def default_objective_metric(self) -> str:
         if self.objectives:

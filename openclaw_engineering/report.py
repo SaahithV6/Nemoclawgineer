@@ -4,32 +4,52 @@ import json
 import shutil
 from pathlib import Path
 
-from openclaw_engineering.models import JobState, GeometryKind
+from openclaw_engineering.models import DeliverableScope, JobState, PartCategory
 from openclaw_engineering.store import artifact_path, job_dir, list_artifacts
 
 
 def write_report(state: JobState, stl_source: Path | None = None) -> Path:
     spec = state.spec
     lines = [
-        "# OpenClaw Engineering Engineering Specification Sheet",
+        "# OpenClaw Engineering — Build & Analysis Specification",
         "",
         "## 1. User request",
         spec.user_request,
         "",
         "## 2. Configuration",
-        f"- Geometry: **{spec.geometry_kind.value}** (constrained NACA wing or defined downforce kit — no freeform blobs)",
+        f"- Part category: **{spec.part_category.value}**",
+        f"- Deliverable: **{spec.deliverable_scope.value}**",
         f"- Flow: `{spec.flow_template}`",
-        f"- Vehicle: Porsche 914-6 baseline STL replaced by combined model in deliverables",
+        "",
+        "### Mount / feasibility (reality check)",
         "",
     ]
-    if spec.grabcad_query:
+    if spec.feasibility:
+        lines.append(f"- Envelope: `{json.dumps(spec.feasibility.get('envelope', {}))}`")
+        for note in spec.feasibility.get("checks", []):
+            lines.append(f"- {note}")
+        lines.append("")
+    lines += [
+        "### Geometry specification (for fabrication)",
+        "```json",
+        json.dumps(spec.geometry_spec, indent=2),
+        "```",
+        "",
+    ]
+
+    mfg = spec.manufacturing or {}
+    if mfg or spec.geometry_spec.get("material"):
         lines += [
-            "### Reference geometry (manual)",
-            f"If you need a catalog wing to tweak, search GrabCAD: {spec.grabcad_query}",
+            "## 3. Manufacturing & ordering",
+            f"- Material: {mfg.get('material') or spec.geometry_spec.get('material', '—')}",
+            f"- Tolerance target: {mfg.get('tolerance_mm', spec.geometry_spec.get('tolerance_mm', '—'))} mm",
+            f"- Notes: {mfg.get('machining_notes') or spec.geometry_spec.get('machining_notes', '—')}",
+            "",
+            "Use `result.stl` (and `part.stl` when present) for CAM, quoting, or OnShape import.",
             "",
         ]
 
-    lines += ["## 3. Design parameters (final)"]
+    lines += ["## 4. Design parameters (final)"]
     for k, v in state.best_params.items():
         lines.append(f"- `{k}`: {v}")
     for k, v in spec.cad_params.items():
@@ -37,7 +57,7 @@ def write_report(state: JobState, stl_source: Path | None = None) -> Path:
             lines.append(f"- `{k}`: {v}")
     lines.append("")
 
-    lines += ["## 4. Optimization iteration log"]
+    lines += ["## 5. Optimization iteration log"]
     lines.append("| Pass | Feasible | Objective | Metrics | Params | Agent note |")
     lines.append("|------|----------|-----------|---------|--------|------------|")
     for p in state.passes:
@@ -51,10 +71,10 @@ def write_report(state: JobState, stl_source: Path | None = None) -> Path:
     lines.append(f"**Stop reason:** `{state.stop_reason or 'unknown'}`")
     lines.append("")
 
+    sec = 6
     if state.speed_sweep:
         lines += [
-            "## 5. Aerodynamic speed sweep (10 mph → stock top speed)",
-            "OpenFOAM-based estimates at sea-level conditions. Wing increases drag vs stock.",
+            f"## {sec}. Aerodynamic speed sweep",
             "",
             "| mph | Cd | Cl | Downforce (lbs) | Drag (lbs) |",
             "|-----|----|----|-----------------|------------|",
@@ -65,68 +85,44 @@ def write_report(state: JobState, stl_source: Path | None = None) -> Path:
                 f"{r.downforce_lbs or 0:.1f} | {r.drag_lbs or 0:.1f} |"
             )
         lines.append("")
-        if state.vmax_estimated_mph:
-            lines.append(
-                f"**Estimated top speed with aero:** ~{state.vmax_estimated_mph:.0f} mph "
-                f"(stock 914-6 reference ~{spec.fluid.get('vmax_stock_mph', 130)} mph; wing adds drag)."
-            )
-        lines.append("")
+        sec += 1
 
     if state.wing_fea:
-        lines += ["## 6. Wing structural analysis (CalculiX)"]
+        lines += [f"## {sec}. Structural analysis (CalculiX)", ""]
         m = state.wing_fea.get("metrics", {})
         lines.append(f"- Max stress: **{m.get('max_stress_mpa', 'n/a')} MPa**")
-        lines.append(f"- Yield reference: {state.wing_fea.get('yield_mpa', 275)} MPa (aluminum)")
         lines.append(f"- Feasible: {state.wing_fea.get('feasible')}")
-        zones = state.wing_fea.get("failure_zones", [])
-        if zones:
-            lines.append("")
-            lines.append("### Failure / reinforcement zones")
-            for z in zones:
-                lines.append(f"- {z}")
-        if state.wing_fea.get("reinforcement_pass"):
-            lines.append("")
-            lines.append("### After reinforcement iteration")
-            rp = state.wing_fea["reinforcement_pass"]
-            lines.append(f"- Max stress: {rp.get('metrics', {}).get('max_stress_mpa')} MPa")
         lines.append("")
-
-    if spec.geometry_kind == GeometryKind.DOWNFORCE_KIT:
-        lines += [
-            "## 7. Downforce kit components",
-            "- Front splitter",
-            "- Front air dam",
-            "- Front arch louvres",
-            "- Underbody diffuser",
-            "- Front venturi duct (hood → windshield region)",
-            "",
-        ]
+        sec += 1
 
     lines += [
-        "## 8. Deliverables",
-        "- `result.stl` — full car with aero (replaces original 914 STL in OnShape when configured)",
-        "- `metrics.json` — last CFD point metrics",
+        f"## {sec}. Deliverables",
+        f"- `result.stl` — per **{spec.deliverable_scope.value}**",
+        "- `part.stl` — generated part only (when optimization ran)",
+        "- `geometry_spec.json` — full build recipe",
         "- This specification sheet",
         "",
-        "## 9. Recommendation",
+        "## Recommendation",
     ]
-    if state.stop_reason == "converged":
-        lines.append(
-            "Optimization plateaued; geometry is a realistic wing/kit within parametric limits. "
-            "Validate top-speed impact on track before high-speed runs."
-        )
-    else:
-        lines.append("Review iteration table; additional passes may improve target downforce at design speed.")
+    lines.append(
+        "Geometry was generated from your clarified `geometry_spec` and tuned against simulation metrics. "
+        "Verify tolerances and tool access before production."
+    )
 
     report_path = artifact_path(state.job_id, "REPORT.md")
     report_path.write_text("\n".join(lines) + "\n")
 
+    spec_json = artifact_path(state.job_id, "geometry_spec.json")
+    spec_json.write_text(json.dumps(spec.geometry_spec, indent=2))
+
     if stl_source and stl_source.exists():
         shutil.copy2(stl_source, artifact_path(state.job_id, "result.stl"))
-        # Archive original for traceability
+        part_src = job_dir(state.job_id) / "work" / "addon.stl"
+        if part_src.exists():
+            shutil.copy2(part_src, artifact_path(state.job_id, "part.stl"))
         orig = job_dir(state.job_id) / "input.stl"
-        if orig.exists():
-            shutil.copy2(orig, artifact_path(state.job_id, "original_914.stl"))
+        if orig.exists() and spec.deliverable_scope == DeliverableScope.FULL_ASSEMBLY:
+            shutil.copy2(orig, artifact_path(state.job_id, "original_body.stl"))
 
     sweep_p = job_dir(state.job_id) / "work" / "speed_sweep" / "speed_sweep.json"
     if sweep_p.exists():
@@ -134,7 +130,6 @@ def write_report(state: JobState, stl_source: Path | None = None) -> Path:
     fea_p = job_dir(state.job_id) / "work" / "wing_fea" / "wing_fea.json"
     if fea_p.exists():
         shutil.copy2(fea_p, artifact_path(state.job_id, "wing_fea.json"))
-
     metrics_src = job_dir(state.job_id) / "work" / "metrics.json"
     if metrics_src.exists():
         shutil.copy2(metrics_src, artifact_path(state.job_id, "metrics.json"))

@@ -12,8 +12,8 @@ from openclaw_engineering.models import AgentFeedback, JobSpec, JobState, PassRe
 
 AGENT_SYSTEM = """You are the CAD/CAE tuning loop for OpenClaw Engineering on Brev.
 
-After each simulation pass you receive REDUCED metrics (inputs/outputs only).
-You tune the 3D CAD generator for the NEXT pass by returning param_adjustments.
+After each simulation pass you receive REDUCED metrics. Tune geometry for the NEXT pass via param_adjustments
+(must match keys in geometry_spec.features, e.g. leg_a_mm, bend_angle_deg, span_mm, blend_radius_mm).
 
 Respond with ONLY JSON:
 {
@@ -22,12 +22,7 @@ Respond with ONLY JSON:
   "param_adjustments": {"param_name": number}
 }
 
-Rules:
-- CFD rear wing: adjust angle_of_attack_deg, chord_mm, span_mm, thickness_mm toward objectives/constraints.
-- CFD downforce kit: adjust splitter_extension_mm, diffuser_angle_deg, etc.
-- FEA: you should have set loads in JobSpec.loads before the job ran; use metrics to tune thickness_mm or thickness_scale.
-- suggest_stop=true when gains are diminishing or constraints are met.
-- Never request impossible geometry; stay within JobSpec design_params min/max.
+Respect JobSpec design_params min/max. suggest_stop=true when constraints are met or gains plateau.
 """
 
 
@@ -52,7 +47,9 @@ async def review_pass_async(
                         "pass_index": record.pass_index,
                         "user_request": spec.user_request,
                         "discipline": spec.discipline.value,
-                        "geometry_kind": spec.geometry_kind.value,
+                        "part_category": spec.part_category.value,
+                        "geometry_spec": spec.geometry_spec,
+                        "deliverable_scope": spec.deliverable_scope.value,
                         "objectives": [o.model_dump() for o in spec.objectives],
                         "constraints": [c.model_dump() for c in spec.constraints],
                         "fluid": spec.fluid,

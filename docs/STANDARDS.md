@@ -15,7 +15,10 @@ See `openclaw_engineering/models.py`. Key fields:
 | `design_params` | Optuna / pass-loop variables |
 | `fluid` | speed_mph, density, target_downforce_lbs, elevation |
 | `onshape` | document_id, workspace_id, element_id |
-| `needs_clarification` | Discord/user Q&A before run |
+| `geometry_spec` | `features[]` — bracket/wing/holes/organic (manufacturing recipe) |
+| `deliverable_scope` | `addon_only`, `full_assembly`, `body_only` |
+| `manufacturing` | material, tolerance_mm, machining_notes |
+| `needs_clarification` | Executor-driven Discord Q&A before run |
 
 ## Flow templates
 
@@ -23,7 +26,7 @@ See `openclaw_engineering/models.py`. Key fields:
 |----------|----------|
 | `optimize_fea.yaml` | deform STL → Gmsh → CalculiX → metrics |
 | `analyze_cfd.yaml` | deform → OpenFOAM → CFD metrics |
-| `cfd_wing_optimize.yaml` | Build123d wing → attach to body STL → mesh → OpenFOAM |
+| `cfd_wing_optimize.yaml` | generative CAD → deliverable STL → mesh → OpenFOAM |
 
 ## Reduced agent feedback (between passes)
 

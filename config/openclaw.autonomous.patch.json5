@@ -1,0 +1,10 @@
+// Optional: merge for more autonomous agent behavior on Brev
+// openclaw config patch --file config/openclaw.autonomous.patch.json5
+{
+  agents: {
+    defaults: {
+      // Allow multi-step tool use without asking permission each time (adjust per your OpenClaw version)
+      maxToolIterations: 24,
+    },
+  },
+}

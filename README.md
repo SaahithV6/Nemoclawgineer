@@ -6,7 +6,7 @@
 You ──DM──► OpenClaw (Discord + Nemotron on Brev)
               │
               ▼  MCP: openclaw_engineering_*
-         Executor (this repo): Build123d → Gmsh → OpenFOAM / CalculiX
+         Executor (this repo): dynamic sculpt engine → Gmsh → OpenFOAM / CalculiX
               │
               ▼  hook + Gmail skill
          Email REPORT.md + result.stl
@@ -18,7 +18,7 @@ You ──DM──► OpenClaw (Discord + Nemotron on Brev)
 |-------|------|
 | OpenClaw (`~/.openclaw/.env`) | NVIDIA, `DISCORD_BOT_TOKEN`, Gmail, `OPENCLAW_HOOK_TOKEN` |
 | Executor (`~/.openclaw-engineering/.env`) | OnShape API keys only |
-| OpenClaw skill | `skills/openclaw-engineering/SKILL.md` — **agent infers every demo** |
+| OpenClaw skill | `skills/openclaw-engineering/SKILL.md` — **proactive Discord Q&A + geometry_spec** |
 
 ## Install on Brev
 
@@ -28,13 +28,15 @@ openclaw config patch --file config/openclaw.discord.patch.json5
 openclaw config patch --file config/openclaw.hooks.patch.json5
 ```
 
-Docs: **[docs/ORCHESTRATION_FLOW.md](docs/ORCHESTRATION_FLOW.md)** (full flow) · [docs/SETUP.md](docs/SETUP.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+**Start here:** **[docs/OPENCLAW_START.md](docs/OPENCLAW_START.md)** (Brev + Discord + Gmail + OnShape + autonomous agent)
+
+Docs: [ORCHESTRATION_FLOW.md](docs/ORCHESTRATION_FLOW.md) · [SCULPT_ENGINE.md](docs/SCULPT_ENGINE.md) · [SETUP.md](docs/SETUP.md)
 
 ## CLI (testing only)
 
 ```bash
 openclaw-engineering-doctor
-NEMCLAW_DRY_RUN=1  # legacy env alias still works as OPENCLAW_ENGINEERING_DRY_RUN
+OPENCLAW_ENGINEERING_DRY_RUN=1
 ```
 
 OpenClaw demos should **not** use the CLI; the agent submits JobSpec JSON via MCP.

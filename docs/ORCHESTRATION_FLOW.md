@@ -14,7 +14,7 @@ This document is the authoritative description of how the system is **supposed t
 | **openclaw-engineering** (this repo) | Runs CAD → mesh → OpenFOAM / CalculiX on the Brev host | No — only via the agent’s MCP tools |
 | **OnShape** | Optional PLM: pull car STL in, push optimized STL back | Via API keys in `~/.openclaw-engineering/.env` |
 
-There is **no** separate “nemoclaw” app, **no** second Discord bot, and **no** Gmail password stored in the executor.
+There is **no** second Discord bot and **no** Gmail password stored in the executor — only **OpenClaw** channels.
 
 ---
 
@@ -91,7 +91,9 @@ The agent reads [`skills/openclaw-engineering/SKILL.md`](../skills/openclaw-engi
 | Decision | Options / notes |
 |----------|-----------------|
 | `discipline` | `fea` or `cfd` |
-| `geometry_kind` | `rear_wing`, `downforce_kit`, or deform-only on uploaded STL |
+| `part_category` | Soft label: `wing`, `bracket`, `aero_kit`, `structural`, `custom` |
+| `geometry_spec` | **Required** feature list (angles, joins, organic blends, holes, wing dims) |
+| `deliverable_scope` | `addon_only` (part file only), `full_assembly`, `body_only` |
 | `mode` | `optimize`, `analyze`, `generate`, `collab` |
 | Objectives | e.g. minimize Cd, maximize downforce, minimize mass |
 | Constraints | e.g. max stress MPa, target downforce at design speed |
@@ -141,28 +143,22 @@ The flow YAML does not change between iterations; only simulation inputs and CAD
 
 ---
 
-## 7. Geometry rules (no “crazy” meshes)
+## 7. Dynamic sculpt engine (Discord → MCP tools → `geometry_spec`)
 
-These rules apply no matter which vehicle or demo you choose.
+Nemotron calls **`openclaw_engineering_list_sculpt_methods`** and fills `geometry_spec.sculpt_method` + `params`. The executor runs LEAP71/nTop-style loft and SDF kernels on Brev — see [`docs/SCULPT_ENGINE.md`](SCULPT_ENGINE.md).
 
-### Rear wing (`geometry_kind: rear_wing`)
+Legacy `geometry_spec.features[]` still maps to sculpt methods. Proactive Q&A via `needs_clarification`.
 
-- **Only** NACA 4-digit style extruded wings (default profile 2412).
-- Parameters: angle of attack, chord, span (clamped to sane bounds).
-- Validation rejects absurd aspect ratios before CFD.
-- Optional: agent provides a **GrabCAD search URL**; you may download a catalog wing and re-upload as `reference_stl` for inspiration — not freeform AI blobs.
+Example methods: `wing_loft`, `hull_loft`, `nozzle_axisymmetric`, `sdf_compose`, `mesh_displacement`, `bracket_parametric`.
 
-### Downforce kit (`geometry_kind: downforce_kit`)
+The agent collects **explicit** dimensions in Discord. Geometry is built from sculpt params, not fixed categories:
 
-Predefined components only:
+- **Brackets** — L/T, leg lengths, bend angle, thickness, join pattern (`gusseted`, `organic_blend`, `lap`, …)
+- **Wings** — airfoil profile, span, chord, AoA (standalone file when `deliverable_scope: addon_only`)
+- **Holes / organic transitions** — for machinability and tolerance control
+- **Aero kits** — splitter/diffuser packages when requested
 
-- Front splitter  
-- Front air dam  
-- Front arch louvres  
-- Underbody diffuser  
-- Front venturi duct (hood → windshield region)  
-
-No organic/sculpted meshes.
+`REPORT.md` + `geometry_spec.json` document material, tolerance, and machining notes for build/order. Manufacturability checks reject bad units/extreme aspect ratios — not arbitrary shape bans.
 
 ### Uploaded STL
 
@@ -338,7 +334,7 @@ Same skill and flow apply to **bracket FEA** or **downforce kit** — only the a
 ## 16. Out of scope for this flow
 
 - WhatsApp (Discord + OpenClaw only for hackathon)  
-- Unconstrained LLM-generated “sculpture” CAD  
-- Separate nemoclaw Discord bot or SMTP credentials in the executor  
+- Raw LLM mesh vertex output (geometry is executor-built from clarified `geometry_spec`)  
+- SMTP credentials in the executor (Gmail via OpenClaw only)  
 - Topology optimization / LEAP71-style generative CAD  
 - Unlimited LLM-in-the-loop solver passes (bounded passes for cloud credits)

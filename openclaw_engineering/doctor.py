@@ -29,6 +29,13 @@ def main():
     check_bin("ccx", optional=True)
     check_bin("freecadcmd", optional=True)
     check_bin("simpleFoam", optional=True)
+    check_bin("dotnet", optional=True)
+    from openclaw_engineering.integrations.picogk_runner import picogk_status
+
+    pk = picogk_status()
+    print("\nPicoGK (optional):")
+    for k, v in pk.items():
+        print(f"  {k}: {v}")
     print("\nDefaults:")
     print(f"  {load_defaults()}")
     print("\nOpenClaw gateway:")
