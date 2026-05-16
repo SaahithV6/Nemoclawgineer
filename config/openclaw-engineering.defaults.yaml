@@ -1,0 +1,28 @@
+optimization:
+  max_passes: 3
+  parallel_candidates: 4
+  convergence:
+    min_relative_gain: 0.02
+    plateau_passes: 2
+
+mesh:
+  demo_coarse: true
+  default_size_mm: 4.0
+  fine_size_mm: 1.5
+
+resources:
+  ccx_threads: 16
+  openfoam_procs: 16
+
+planner:
+  max_llm_calls_per_job: 2
+  enable_summary: false
+
+cad:
+  primary: build123d
+  fallback: cadquery
+  freecad: appimage_only
+
+optuna:
+  enabled: false
+  n_trials: 12

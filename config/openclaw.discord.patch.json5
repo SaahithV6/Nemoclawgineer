@@ -1,0 +1,15 @@
+// Merge into OpenClaw: openclaw config patch --file config/openclaw.discord.patch.json5
+// Set DISCORD_BOT_TOKEN in ~/.openclaw/.env first (same bot you created in Developer Portal).
+{
+  channels: {
+    discord: {
+      enabled: true,
+      token: { source: "env", provider: "default", id: "DISCORD_BOT_TOKEN" },
+      // Private DM: use pairing (default). After pairing, DM your bot for wing/FEA jobs.
+      dm: {
+        enabled: true,
+        policy: "pairing",
+      },
+    },
+  },
+}

@@ -1,0 +1,9 @@
+// Enables openclaw-engineering to ping OpenClaw when a job completes (Discord + Gmail delivery by the agent).
+// Set OPENCLAW_HOOK_TOKEN in ~/.openclaw/.env (generate a random secret).
+{
+  hooks: {
+    enabled: true,
+    token: { source: "env", provider: "default", id: "OPENCLAW_HOOK_TOKEN" },
+    path: "/hooks",
+  },
+}

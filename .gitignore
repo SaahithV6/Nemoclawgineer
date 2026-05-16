@@ -6,6 +6,6 @@ __pycache__/
 *.egg-info/
 .dist/
 .env
-~/.nemoclaw/
+~/.openclaw_engineering/
 *.log
 .pytest_cache/

@@ -1,0 +1,34 @@
+name: cfd_wing_optimize
+vars:
+  body_stl: ${job.input_stl}
+  params: ${job.params}
+steps:
+  - id: geometry
+    run: openclaw_engineering.tools.build123d_cad.generate_geometry
+    with:
+      params: ${job.params}
+      user_request: ${job.user_request}
+    out: addon.stl
+  - id: combine
+    run: openclaw_engineering.tools.build123d_cad.attach_wing_to_body
+    with:
+      body_stl: ${job.input_stl}
+      wing_stl: ${addon.stl}
+    out: combined.stl
+  - id: mesh
+    run: openclaw_engineering.tools.gmsh.mesh_stl
+    with:
+      stl: ${combined.stl}
+      size: ${job.mesh_size}
+    out: model.inp
+  - id: cfd
+    run: openclaw_engineering.tools.openfoam.run_case
+    with:
+      stl: ${combined.stl}
+      fluid: ${job.fluid}
+    out: openfoam/
+  - id: metrics
+    run: openclaw_engineering.tools.cfd.extract_cfd_metrics
+    with:
+      case_dir: ${openfoam/}
+    out: metrics.json

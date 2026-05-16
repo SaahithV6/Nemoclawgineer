@@ -1,5 +1,5 @@
-from nemoclaw.models import Constraint, DesignParam, JobSpec, JobState, Objective
-from nemoclaw.optimizer import _candidate_params, _feasible, _objective_value
+from openclaw_engineering.models import Constraint, DesignParam, JobSpec, JobState, Objective
+from openclaw_engineering.optimizer import _candidate_params, _feasible, _objective_value
 
 
 def test_objective_minimize_mass():

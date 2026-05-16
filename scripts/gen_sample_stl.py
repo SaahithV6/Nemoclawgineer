@@ -73,7 +73,7 @@ def main():
             tris.append(tri(corners[f[0]], corners[f[1]], corners[f[2]]))
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    buf = bytearray(b"nemoclaw sample bracket" + b"\0" * 56)
+    buf = bytearray(b"openclaw-engineering sample bracket" + b"\0" * 56)
     buf += struct.pack("<I", len(tris))
     for t in tris:
         buf += t
