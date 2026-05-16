@@ -33,12 +33,21 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-3. Start the executor API (systemd user service is installed by `setup.sh`):
+3. Start the executor API:
 
 ```bash
+# If systemctl --user fails (common over plain SSH):
+./scripts/start-api.sh
+# or
+~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-api
+
+# Optional: enable user systemd across logins on Brev
+sudo loginctl enable-linger ubuntu
+# then after re-login:
 systemctl --user enable --now openclaw-engineering-api
-systemctl --user status openclaw-engineering-api
 ```
+
+FreeCAD AppImage is **optional**; if the download fails, setup continues (Build123d/sculpt is primary).
 
 4. Smoke test:
 

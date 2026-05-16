@@ -12,8 +12,9 @@ USER_SYSTEMD="$HOME/.config/systemd/user"
 SKILL_DST="$HOME/.openclaw/skills/openclaw-engineering"
 OPENCLAW_JSON="$HOME/.openclaw/openclaw.json"
 
-# FreeCAD weekly AppImage (override with FREECAD_APPIMAGE_URL)
-FREECAD_APPIMAGE_URL="${FREECAD_APPIMAGE_URL:-https://github.com/FreeCAD/FreeCAD/releases/download/weekly/linux-x86_64.AppImage}"
+# FreeCAD AppImage (optional — Build123d is the primary CAD path)
+FREECAD_APPIMAGE_URL="${FREECAD_APPIMAGE_URL:-https://github.com/FreeCAD/FreeCAD/releases/download/1.0.0/FreeCAD_1.0.0-Linux-x86_64.AppImage}"
+FREECAD_APPIMAGE_URL_ALT="https://github.com/FreeCAD/FreeCAD/releases/download/weekly/linux-x86_64.AppImage"
 
 log() { printf '[openclaw_engineering] %s\n' "$*"; }
 
@@ -39,12 +40,21 @@ install_freecad_appimage() {
   if [[ -x "$target" ]]; then
     log "FreeCAD AppImage already present: $target"
   else
-    log "Downloading FreeCAD AppImage..."
-    wget -q --show-progress -O "$target" "$FREECAD_APPIMAGE_URL" || {
-      log "ERROR: FreeCAD AppImage download failed. Set FREECAD_APPIMAGE_URL or copy AppImage to $target"
-      return 1
-    }
+    log "Downloading FreeCAD AppImage (optional)..."
+    if ! wget -q --show-progress -O "$target" "$FREECAD_APPIMAGE_URL"; then
+      log "Primary URL failed, trying weekly build..."
+      wget -q --show-progress -O "$target" "$FREECAD_APPIMAGE_URL_ALT" || true
+    fi
+    if [[ ! -s "$target" ]]; then
+      rm -f "$target"
+      log "WARN: FreeCAD AppImage skipped (optional). CAD uses Build123d/sculpt engine."
+      log "      To add later: wget -O $target <AppImage URL>"
+      return 0
+    fi
     chmod +x "$target"
+  fi
+  if [[ ! -x "$target" ]]; then
+    return 0
   fi
   mkdir -p "$HOME/.local/bin"
   cat > "$binlink" <<'WRAP'
@@ -141,6 +151,22 @@ install_skill() {
   log "OpenClaw skill -> $SKILL_DST"
 }
 
+start_api_nohup() {
+  mkdir -p "$STATE_DIR"
+  if pgrep -f "openclaw-engineering-api" >/dev/null 2>&1; then
+    log "openclaw-engineering-api already running (pgrep)"
+    return 0
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE" 2>/dev/null || true
+  set +a
+  nohup "$VENV_DIR/bin/openclaw-engineering-api" > "$STATE_DIR/api.log" 2>&1 &
+  sleep 1
+  log "API started via nohup — log: $STATE_DIR/api.log"
+  log "Health: curl -s http://127.0.0.1:8765/health"
+}
+
 install_systemd_units() {
   mkdir -p "$USER_SYSTEMD"
   cat > "$USER_SYSTEMD/openclaw-engineering-api.service" <<EOF
@@ -158,13 +184,17 @@ Restart=on-failure
 [Install]
 WantedBy=default.target
 EOF
-  systemctl --user daemon-reload 2>/dev/null || true
-  systemctl --user enable openclaw-engineering-api.service 2>/dev/null || true
-  systemctl --user restart openclaw-engineering-api.service 2>/dev/null || {
-    log "Starting API via nohup"
-    nohup "$VENV_DIR/bin/openclaw-engineering-api" > "$STATE_DIR/api.log" 2>&1 &
-  }
-  log "Discord: configure via OpenClaw (see docs/SETUP.md), not openclaw-engineering-discord"
+  if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" && -n "${XDG_RUNTIME_DIR:-}" ]] && systemctl --user daemon-reload 2>/dev/null; then
+    systemctl --user enable openclaw-engineering-api.service 2>/dev/null || true
+    if systemctl --user restart openclaw-engineering-api.service 2>/dev/null; then
+      log "API: systemd user unit openclaw-engineering-api.service"
+      return 0
+    fi
+  fi
+  log "systemctl --user unavailable in this SSH session (no DBUS). Starting API with nohup."
+  log "For persistent user units on Brev: loginctl enable-linger \$USER  (once), then re-login."
+  start_api_nohup
+  log "Or run: $REPO_ROOT/scripts/start-api.sh"
 }
 
 main() {
