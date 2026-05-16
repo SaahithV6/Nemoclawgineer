@@ -6,6 +6,65 @@
 
 ---
 
+## Part 0 — Required running services (do this first)
+
+Yes: the **executor API must be running**. MCP job tools call `http://127.0.0.1:8765/jobs/*`; if API is down, job submission fails.
+
+Run this quick readiness block on Brev:
+
+```bash
+# Executor API
+./scripts/start-api.sh
+curl -s http://127.0.0.1:8765/health
+
+# OpenClaw gateway
+openclaw gateway restart
+
+# Solver readiness (strict CFD requires simpleFoam)
+which gmsh
+which ccx
+which simpleFoam
+
+# Full doctor check
+~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor
+```
+
+If `simpleFoam` is missing, install OpenFOAM before running CFD jobs.
+
+---
+
+## Part 1 — One-pass setup checklist (copy/paste)
+
+Use this exact sequence on a fresh Brev instance:
+
+```bash
+# 1) Clone + install executor
+git clone https://github.com/SaahithV6/Nemoclawgineer ~/openclaw-engineering
+cd ~/openclaw-engineering
+chmod +x setup.sh
+./setup.sh --reset
+
+# 2) Start/verify executor API
+./scripts/start-api.sh
+curl -s http://127.0.0.1:8765/health
+
+# 3) Patch OpenClaw gateway
+openclaw config patch --file config/openclaw.discord.patch.json5
+openclaw config patch --file config/openclaw.hooks.patch.json5
+openclaw gateway restart
+
+# 4) Gmail integration
+openclaw webhooks gmail setup --account you@gmail.com
+openclaw webhooks gmail run
+
+# 5) Final readiness check
+~/.local/share/openclaw-engineering/venv/bin/openclaw-engineering-doctor
+```
+
+If doctor shows `[MISSING] simpleFoam`, install OpenFOAM and re-run doctor before CFD jobs.
+
+---
+
 ## What runs where
 
 ```text
@@ -32,6 +91,22 @@ cd ~/openclaw-engineering
 chmod +x setup.sh
 ./setup.sh
 ```
+
+### `.env` files: what to create and where
+
+- You should have **two** env files on Brev:
+  - `~/.openclaw/.env` (OpenClaw gateway/channels/tokens)
+  - `~/.openclaw-engineering/.env` (executor settings and hook auth visibility)
+- You usually **do not** edit `.env.example` directly.
+- `setup.sh` automatically creates `~/.openclaw-engineering/.env` from `.env.example` if missing.
+- If it did not get created for some reason, run:
+
+```bash
+mkdir -p ~/.openclaw-engineering
+cp ~/openclaw-engineering/.env.example ~/.openclaw-engineering/.env
+```
+
+Then edit `~/.openclaw-engineering/.env` (not `.env.example`).
 
 3. Start the executor API:
 
