@@ -14,7 +14,7 @@ OPENCLAW_JSON="$HOME/.openclaw/openclaw.json"
 
 # FreeCAD AppImage (optional — Build123d is the primary CAD path)
 FREECAD_APPIMAGE_URL="${FREECAD_APPIMAGE_URL:-https://github.com/FreeCAD/FreeCAD/releases/download/1.0.0/FreeCAD_1.0.0-Linux-x86_64.AppImage}"
-FREECAD_APPIMAGE_URL_ALT="https://github.com/FreeCAD/FreeCAD/releases/download/weekly/linux-x86_64.AppImage"
+FREECAD_APPIMAGE_URL_ALT="https://github.com/FreeCAD/FreeCAD/releases/download/1.1.1/FreeCAD_1.1.1-Linux-x86_64-py311.AppImage"
 
 log() { printf '[openclaw_engineering] %s\n' "$*"; }
 
