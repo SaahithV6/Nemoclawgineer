@@ -13,7 +13,8 @@ def run_case(case_dir: Path, fluid: dict, stl: Path | None = None) -> Path:
     if stl is None or not stl.exists():
         raise RuntimeError("CFD run requires a valid STL geometry input")
     _stage_geometry(case_dir, stl)
-    _write_minimal_case(case_dir, fluid)
+    solver_cmd, solver_tag = _resolve_openfoam_solver()
+    _write_minimal_case(case_dir, fluid, solver_tag)
 
     if dry_run():
         metrics = _synthetic_cfd_metrics(fluid)
@@ -22,19 +23,22 @@ def run_case(case_dir: Path, fluid: dict, stl: Path | None = None) -> Path:
         write_json(case_dir / "solver_status.json", {"source": "dry_run_proxy", "stl": str(stl)})
         return case_dir
 
-    simple = which("simpleFoam")
-    if not simple:
-        raise RuntimeError("OpenFOAM binary simpleFoam not found on PATH; cannot run strict solver pipeline")
+    if solver_cmd is None:
+        raise RuntimeError("OpenFOAM solver not found on PATH (expected foamRun or simpleFoam)")
 
-    proc = run_cmd([simple], cwd=case_dir, timeout=7200)
-    (case_dir / "simpleFoam.log").write_text((proc.stdout or "") + "\n" + (proc.stderr or ""))
+    proc = run_cmd(solver_cmd, cwd=case_dir, timeout=7200)
+    log_name = "foamRun.log" if solver_tag == "foamRun" else "simpleFoam.log"
+    (case_dir / log_name).write_text((proc.stdout or "") + "\n" + (proc.stderr or ""))
     if proc.returncode != 0:
         raise RuntimeError(
-            f"OpenFOAM solve failed (code={proc.returncode}): {(proc.stderr or proc.stdout).strip()[:300]}"
+            f"OpenFOAM solve failed with {solver_tag} (code={proc.returncode}): {(proc.stderr or proc.stdout).strip()[:300]}"
         )
     metrics = _parse_forces(case_dir, fluid)
     write_json(case_dir / "metrics.json", metrics)
-    write_json(case_dir / "solver_status.json", {"source": "simpleFoam_proxy_parse", "stl": str(stl)})
+    write_json(
+        case_dir / "solver_status.json",
+        {"source": f"{solver_tag}_proxy_parse", "stl": str(stl)},
+    )
     return case_dir
 
 
@@ -48,7 +52,7 @@ def extract_cfd_metrics(case_dir: Path, out_json: Path) -> dict[str, float]:
     return data
 
 
-def _write_minimal_case(case_dir: Path, fluid: dict) -> None:
+def _write_minimal_case(case_dir: Path, fluid: dict, application: str = "simpleFoam") -> None:
     u = float(fluid.get("velocity_ms", 15.0))
     rho = float(fluid.get("density", 1.2))
     (case_dir / "system" / "controlDict").mkdir(parents=True, exist_ok=True)
@@ -57,7 +61,7 @@ def _write_minimal_case(case_dir: Path, fluid: dict) -> None:
     (case_dir / "system" / "controlDict").write_text(
         f"""
 FoamFile {{ version 2.0; format ascii; class dictionary; object controlDict; }}
-application     simpleFoam;
+application     {application};
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
@@ -81,12 +85,23 @@ def _stage_geometry(case_dir: Path, stl: Path) -> Path:
 
 
 def _parse_forces(case_dir: Path, fluid: dict) -> dict[str, float]:
-    log = case_dir / "simpleFoam.log"
-    if log.exists():
-        text = log.read_text(errors="ignore")
-        if "Cd" in text or "Cl" in text:
-            pass
+    for name in ("foamRun.log", "simpleFoam.log"):
+        log = case_dir / name
+        if log.exists():
+            text = log.read_text(errors="ignore")
+            if "Cd" in text or "Cl" in text:
+                break
     return _synthetic_cfd_metrics(fluid)
+
+
+def _resolve_openfoam_solver() -> tuple[list[str] | None, str]:
+    foam_run = which("foamRun")
+    if foam_run:
+        return [foam_run, "-solver", "incompressibleFluid"], "foamRun"
+    simple = which("simpleFoam")
+    if simple:
+        return [simple], "simpleFoam"
+    return None, "none"
 
 
 def _synthetic_cfd_metrics(fluid: dict) -> dict[str, float]:

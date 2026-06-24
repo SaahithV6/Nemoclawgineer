@@ -16,6 +16,17 @@ def check_bin(name: str, optional: bool = False) -> bool:
     return ok or optional
 
 
+def check_openfoam() -> bool:
+    foamrun = which("foamRun")
+    simple = which("simpleFoam")
+    if foamrun or simple:
+        preferred = foamrun or simple
+        print(f"  [OK] openfoam ({preferred})")
+        return True
+    print("  [MISSING] openfoam (foamRun/simpleFoam)")
+    return False
+
+
 def main():
     print("OpenClaw Engineering doctor")
     print("===============")
@@ -28,7 +39,7 @@ def main():
     check_bin("gmsh", optional=False)
     check_bin("ccx", optional=False)
     check_bin("freecadcmd", optional=True)
-    check_bin("simpleFoam", optional=False)
+    check_openfoam()
     check_bin("dotnet", optional=True)
     from openclaw_engineering.integrations.picogk_runner import picogk_status
 

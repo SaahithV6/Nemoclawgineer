@@ -147,7 +147,7 @@ WRAP
 }
 
 install_openfoam_esi() {
-  if command -v simpleFoam >/dev/null 2>&1; then
+  if command -v foamRun >/dev/null 2>&1 || command -v simpleFoam >/dev/null 2>&1; then
     log "OpenFOAM already on PATH"
     return
   fi
@@ -164,10 +164,13 @@ install_openfoam_esi() {
     log "OpenFOAM install failed — strict CFD runs will fail until simpleFoam is installed"
     return
   }
-  if command -v simpleFoam >/dev/null 2>&1; then
+  if command -v foamRun >/dev/null 2>&1; then
+    log "OpenFOAM installed: $(command -v foamRun)"
+  elif command -v simpleFoam >/dev/null 2>&1; then
     log "OpenFOAM installed: $(command -v simpleFoam)"
   else
-    log "OpenFOAM package installed but simpleFoam not on current PATH; source OpenFOAM bashrc in your shell profile."
+    log "OpenFOAM package installed but solver binaries are not on current PATH."
+    log "Add to shell profile: source /opt/openfoam13/etc/bashrc"
   fi
 }
 

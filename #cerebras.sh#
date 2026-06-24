@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# --- CONFIGURATION ---
+# Your key is safe here.
+API_KEY="csk-9et9ppncmv8r2tvrhjfj4rne5et9k325enx42n8yhmdek6ef"
+
+# DEFAULT MODEL (Swap this if you want a different default)
+MODEL="llama3.1-8b"
+# ---------------------
+
+# Arch Colors
+G='\033[1;32m' # Green
+B='\033[1;34m' # Blue
+P='\033[1;35m' # Purple
+R='\033[1;31m' # Red
+NC='\033[0m'    # No Color
+
+clear
+echo -e "${P}Cerebras Systems REPL${NC}"
+
+echo -e "${B}Current Model:${NC} $MODEL"
+echo -e "Commands: ${G}exit${NC} to quit, ${G}model <name>${NC} to switch models.\n"
+
+while true; do
+    echo -ne "${G}You > ${NC}"
+    read -r USER_INPUT
+
+    # Handlers
+    [[ "$USER_INPUT" == "exit" || "$USER_INPUT" == "quit" ]] && break
+    [[ -z "$USER_INPUT" ]] && continue
+
+    # Allow model switching on the fly
+o    if [[ "$USER_INPUT" == model* ]]; then
+        MODEL=$(echo "$USER_INPUT" | cut -d' ' -f2)
+        echo -e "${P}Switched to model: $MODEL${NC}"
+        continue
+    fi
+
+    # Building the JSON safely with jq (The Arch Way)
+    PAYLOAD=$(jq -n \
+        --arg m "$MODEL" \
+        --arg u "$USER_INPUT" \
+        '{model: $m, messages: [{role: "user", content: $u}], temperature: 0, stream: false}')
+
+    # The Request
+    RESPONSE=$(curl -s --location 'https://api.cerebras.ai/v1/chat/completions' \
+        --header 'Content-Type: application/json' \
+        --header "Authorization: Bearer $API_KEY" \
+        --data "$PAYLOAD")
+
+    # Parsing
+    CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // .error.message')
+
+    if [[ "$CONTENT" == "null" || "$RESPONSE" == *"error"* ]]; then
+        echo -e "\n${R}API Error:${NC}"
+        echo "$RESPONSE" | jq .
+    else
+        echo -e "\n${B}Cerebras:${NC}"
+        echo -e "$CONTENT\n"
+    fi
+done
